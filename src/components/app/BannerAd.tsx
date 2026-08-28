@@ -1,0 +1,101 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import { Sparkles, X } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { requestAd, trackAdEvent } from '@/lib/ads-client'
+import type { ServedAd } from '@/lib/types'
+
+const SHOWN_KEY = 'vx_banner_ad_shown'
+const DISMISSED_KEY = 'vx_banner_ad_dismissed'
+
+/**
+ * Slim banner ad strip rendered on top of the Home view.
+ * Fetches at most one BANNER ad per browser session; hides for the
+ * session once dismissed. Renders nothing when no ad is eligible.
+ */
+export function BannerAd() {
+  const [ad, setAd] = useState<ServedAd | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.sessionStorage.getItem(SHOWN_KEY) || window.sessionStorage.getItem(DISMISSED_KEY)) return
+    let cancelled = false
+    void (async () => {
+      const served = await requestAd({ placement: 'BANNER' })
+      if (cancelled || !served) return
+      window.sessionStorage.setItem(SHOWN_KEY, '1')
+      setAd(served)
+      void trackAdEvent(served, 'IMPRESSION')
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (!ad) return null
+
+  function dismiss() {
+    try {
+      window.sessionStorage.setItem(DISMISSED_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+    setAd(null)
+  }
+
+  function handleCta() {
+    if (!ad) return
+    void trackAdEvent(ad, 'CLICK')
+    toast('Ad clicked (demo)')
+  }
+
+  return (
+    <div className="relative z-10 mx-4 mt-4 md:mx-6" role="complementary" aria-label="Sponsored">
+      <div className="vx-card flex h-14 items-center gap-3 overflow-hidden rounded-xl pl-3 pr-10">
+        {ad.type === 'IMAGE' && ad.mediaUrl ? (
+          <button
+            type="button"
+            onClick={handleCta}
+            className="relative h-full w-full"
+            aria-label={ad.headline ?? 'Advertisement'}
+          >
+            <Image
+              src={ad.mediaUrl}
+              alt={ad.headline ?? 'Advertisement'}
+              fill
+              sizes="(max-width: 768px) 100vw, 700px"
+              className="object-cover"
+            />
+          </button>
+        ) : (
+          <>
+            <span
+              className="vx-glow grid size-8 shrink-0 place-items-center rounded-lg text-white"
+              style={{ background: 'linear-gradient(135deg, var(--vx-accent), #ec4899)' }}
+            >
+              <Sparkles className="size-4" />
+            </span>
+            <button type="button" onClick={handleCta} className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-xs font-semibold">{ad.headline ?? ad.campaignName}</span>
+              {ad.bodyText && <span className="block truncate text-[11px] text-muted-foreground">{ad.bodyText}</span>}
+            </button>
+            <span className="vx-chip shrink-0 border-[var(--vx-accent)]/40 bg-[var(--vx-accent)]/15 text-[11px] font-semibold text-[var(--vx-accent-soft)]">
+              {ad.ctaText ?? 'Learn more'}
+            </span>
+          </>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Close ad"
+        className="absolute right-1.5 top-1/2 z-10 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white/70 backdrop-blur transition hover:bg-black/60 hover:text-white"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  )
+}

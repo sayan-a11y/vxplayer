@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Library ────────────────────────────────────────────────────────────────
+
+model Video {
+  id              String         @id @default(cuid())
+  title           String
+  fileName        String
+  folder          String
+  duration        Int // seconds
+  width           Int
+  height          Int
+  resolutionLabel String // e.g. "1080p"
+  sizeMB          Int
+  codec           String // video codec, e.g. h264 / hevc
+  audioCodec      String // e.g. aac / ac3
+  container       String // mp4 / mkv ...
+  frameRate       Float
+  srcUrl          String
+  thumbnailUrl    String
+  addedAt         DateTime       @default(now())
+  favorite        Boolean        @default(false)
+  history         HistoryEntry?
+  playlistItems   PlaylistItem[]
+}
+
+model HistoryEntry {
+  id           String   @id @default(cuid())
+  videoId      String   @unique
+  video        Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  position     Int // seconds
+  watchedPct   Float // 0..100
+  lastPlayedAt DateTime @default(now())
+}
+
+model Playlist {
+  id        String         @id @default(cuid())
+  name      String
+  createdAt DateTime       @default(now())
+  items     PlaylistItem[]
+}
+
+model PlaylistItem {
+  id         String   @id @default(cuid())
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  videoId    String
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  order      Int      @default(0)
+
+  @@unique([playlistId, videoId])
+}
+
+// ─── Admin ──────────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  role           String // SUPER_ADMIN | ADMIN | AD_MANAGER | VIEWER
+  twoFactor      Boolean  @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminName String
+  adminEmail String
+  action    String // LOGIN | LOGOUT | CAMPAIGN_CREATED | CAMPAIGN_UPDATED | CAMPAIGN_DELETED | ADS_KILL_SWITCH | SETTINGS_UPDATED | ...
+  target    String?
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+// ─── Advertising ────────────────────────────────────────────────────────────
+
+model Campaign {
+  id           String     @id @default(cuid())
+  name         String
+  advertiser   String
+  status       String     @default("ACTIVE") // ACTIVE | PAUSED | EXPIRED | DRAFT
+  startAt      DateTime
+  endAt        DateTime
+  priority     String     @default("MEDIUM") // HIGH | MEDIUM | LOW
+  frequencyCap Int        @default(2) // max impressions per session per campaign
+  placements   String     @default("") // CSV: PRE_ROLL,MID_ROLL,POST_ROLL,OVERLAY,BANNER
+  creatives    Creative[]
+  createdAt    DateTime   @default(now())
+}
+
+model Creative {
+  id         String  @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  name       String
+  type       String // VIDEO | IMAGE | OVERLAY | BANNER | TEXT
+  mediaUrl   String? // video/image url; null for TEXT
+  duration   Int     @default(15) // seconds
+  skipAfter  Int     @default(5) // seconds until skippable; -1 = non-skippable
+  position   String? // overlay position: TOP | BOTTOM | CENTER
+  headline   String?
+  bodyText   String?
+  ctaText    String?
+  ctaUrl     String?
+  createdAt  DateTime @default(now())
+}
+
+model AdEvent {
+  id         String   @id @default(cuid())
+  campaignId String
+  creativeId String
+  placement  String // PRE_ROLL | MID_ROLL | POST_ROLL | OVERLAY | BANNER
+  eventType  String // IMPRESSION | START | Q25 | Q50 | Q75 | COMPLETE | SKIP | CLICK | ERROR
+  sessionId  String?
+  videoId    String?
+  createdAt  DateTime @default(now())
+
+  @@index([campaignId, eventType])
+  @@index([sessionId, createdAt])
+}
+
+// ─── Settings & analytics ───────────────────────────────────────────────────
+
+model AppSettings {
+  id                   String  @id @default("singleton")
+  // Ad master switches (emergency controls)
+  adsEnabled           Boolean @default(true)
+  preRollEnabled       Boolean @default(true)
+  midRollEnabled       Boolean @default(true)
+  postRollEnabled      Boolean @default(true)
+  overlayEnabled       Boolean @default(true)
+  bannerEnabled        Boolean @default(true)
+  // Frequency
+  adsPerSession        Int     @default(6)
+  maxMidRolls          Int     @default(2)
+  overlayPerHour       Int     @default(3)
+  minMidRollDurationSec Int    @default(300) // mid-rolls only for videos >= 5 min
+  // Offline policy: SKIP_ADS | LAST_CACHED
+  offlineAdFallback    String  @default("LAST_CACHED")
+  adCacheVersion       Int     @default(1)
+  // Player defaults (synced to app)
+  defaultSpeed         Float   @default(1)
+  autoPlayNext         Boolean @default(true)
+  resumePlayback       Boolean @default(true)
+  doubleTapSeek        Int     @default(10)
+  hwAcceleration       Boolean @default(true)
+  defaultOrientation   String  @default("SENSOR") // PORTRAIT | LANDSCAPE | SENSOR | LOCKED
+  theme                String  @default("dark") // dark | light | system
+  accent               String  @default("violet") // violet | purple | fuchsia | rose
+  playerTheme          String  @default("OLED") // OLED | DIM
+  subtitleSize         String  @default("M") // S | M | L | XL
+  subtitlePosition     Int     @default(85) // % from top
+  subtitleBgOpacity    Int     @default(60) // 0..100
+  defaultSubtitleLang  String  @default("English")
+  updatedAt            DateTime @updatedAt
+}
+
+model DailyStat {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  totalUsers      Int
+  activeUsers     Int
+  newUsers        Int
+  playbackSessions Int
+  videosPlayed    Int
+  watchTimeMin    Int
+  adImpressions   Int
+  adStarts        Int
+  adCompletions   Int
+  adSkips         Int
+  adErrors        Int
+}
