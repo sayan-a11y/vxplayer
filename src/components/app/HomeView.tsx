@@ -9,6 +9,7 @@ import {
   Clock3,
   Film,
   FolderOpen,
+  FolderSearch,
   Heart,
   History,
   ListVideo,
@@ -20,6 +21,7 @@ import { toast } from 'sonner'
 
 import { apiGet } from '@/lib/api'
 import { formatDuration, formatSize } from '@/lib/format'
+import { requestVideoPick } from '@/lib/import-client'
 import { useAppStore } from '@/lib/store'
 import type { PlaylistDTO, VideoDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -214,8 +216,15 @@ export function HomeView() {
           </div>
           <p className="mt-1.5 font-medium">Your library is empty</p>
           <p className="max-w-xs text-sm text-muted-foreground">
-            Use “Rescan library” in the header menu to find videos on your device.
+            Import videos from this device's storage to start watching.
           </p>
+          <Button
+            onClick={() => requestVideoPick()}
+            className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
+          >
+            <FolderSearch className="size-4" />
+            Scan device storage
+          </Button>
         </div>
       </div>
     )

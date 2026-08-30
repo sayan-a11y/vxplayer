@@ -186,3 +186,19 @@ Work Log:
 
 Stage Summary:
 - App is now production-clean: zero demo videos, zero demo ads, zero fake analytics. Library fills via real scans; ad inventory is created exclusively through Admin → Campaigns/Creatives. Ad engine, kill switches, frequency caps, offline cache and RBAC all remain fully functional and simply serve nothing until real campaigns exist.
+
+---
+Task ID: 6
+Agent: main (Z.ai Code)
+Task: Real device video import (mobile storage → library) + Admin panel on mobile.
+
+Work Log:
+- NEW POST /api/videos/upload?name=<filename>: raw-body stream → public/media/<uuid>.<ext> (no buffering, 3GB cap), ffprobe for real metadata (duration/WxH/codec/audioCodec/fps → resolutionLabel 4K…SD), ffmpeg thumbnail @ min(3s, 25%) with lavfi color fallback, folder='Device storage', title from filename (dots→spaces). Duplicate guard (same fileName+sizeMB → return existing, delete temp). Corrupted/non-video files rejected 415 + temp cleaned; bad ext 415 with allowed list. runtime='nodejs'.
+- Client import: src/lib/import-client.ts (requestVideoPick() dispatches vx:pick-videos; importVideoFiles() uploads sequentially via XHR with per-file progress). Store: uploads/upsertUpload/removeUpload. NEW src/components/app/UploadTray.tsx — floating progress tray (bottom-right, above mobile nav) with per-file bar + processing/done/error states.
+- AppShell: persistent sr-only <input type=file accept=video/* multiple> (a11y-discoverable, data-testid=video-import-input) + event listener; header menu item "Rescan library" → "Scan device storage" (FolderSearch). Empty states (Home/Videos root/Folders) got "Scan device storage" CTA. SettingsView "Rescan library" → "Scan device storage" triggering the same picker.
+- Admin mobile: removed Desktop-required gate in AdminApp; sidebar hidden lg:flex, header hamburger (lg:hidden) → Sheet side=left drawer (opaque bg #0a0b1c, profile + role + full nav + logout); responsive paddings (p-4 sm:p-6 lg:p-8, px-4 sm:px-6). ui/table.tsx baseline min-w-[640px] so admin tables scroll horizontally on phones (AuditView min-w-[720px] override; AuditView ScrollArea → vx-scroll overflow-auto). Verified table container scrollWidth 764 > clientWidth 356 on 390px viewport.
+- E2E (agent-browser): curl upload OK (28MB test mp4 → 720p/h264/aac/30s + thumb); duplicate → existing row; corrupted → 415; bad ext → 415. Browser UI upload via real file input → toast "Added 1 video", tray shows 1/1 with progress, card appears instantly with ffprobe thumb, playback works in full player (0:02/0:45, progress saved → Continue Watching "Resume at 0:14"). Mobile 390x844: 7-tap → login → 2FA → dashboard grid renders; drawer nav works; Campaigns/Videos views clean. Desktop 1280x800 regression: sidebar intact, dashboard identical. Mobile player: bottom nav + menu shows "Scan device storage".
+- Cleanup: test videos/thumbs/rows/audit deleted after verification; media/ and thumbs/ empty (vx_logo.png only). Lint 0 errors (11 pre-existing warnings); tsc clean (app files); dev.log + browser console error-free.
+
+Stage Summary:
+- "Scan device storage" is real now: on Android/Chrome the file input accept=video/* multiple opens the phone's video picker; selected files stream to the server, get probed by ffprobe, thumbnailed by ffmpeg, and appear in Home/Videos/Folders with correct metadata and play in the VX player. Admin panel opens and fully works on mobile (drawer nav); desktop unchanged. /api/scan route left in place (no longer referenced by UI).

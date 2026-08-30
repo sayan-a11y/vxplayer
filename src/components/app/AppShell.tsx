@@ -1,27 +1,25 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowUpDown,
   Check,
   ChevronRight,
   FolderOpen,
+  FolderSearch,
   Heart,
   History,
   Home,
   ListVideo,
-  Loader2,
   MoreHorizontal,
   MoreVertical,
   PlaySquare,
-  RefreshCw,
   Search,
   Settings2,
   type LucideIcon,
 } from 'lucide-react'
-import { toast } from 'sonner'
 
-import { apiPost } from '@/lib/api'
+import { PICK_VIDEOS_EVENT, importVideoFiles, requestVideoPick } from '@/lib/import-client'
 import { useAppStore, type AppView } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -43,6 +41,7 @@ import { HomeView } from './HomeView'
 import { PlaylistsView } from './PlaylistsView'
 import { SearchView } from './SearchView'
 import { SettingsView } from './SettingsView'
+import { UploadTray } from './UploadTray'
 import { VideosView, type LibrarySort } from './VideosView'
 
 type NavItem = { view: AppView; label: string; icon: LucideIcon }
@@ -165,11 +164,22 @@ export function AppShell() {
   const setOfflineMode = useAppStore((s) => s.setOfflineMode)
   const tapCount = useAppStore((s) => s.tapCount)
   const registerLogoTap = useAppStore((s) => s.registerLogoTap)
-  const bumpData = useAppStore((s) => s.bumpData)
 
-  const [scanning, setScanning] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [tapChipVisible, setTapChipVisible] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // "Scan device storage" opens the device video picker (gallery on Android).
+  useEffect(() => {
+    const open = () => fileInputRef.current?.click()
+    window.addEventListener(PICK_VIDEOS_EVENT, open)
+    return () => window.removeEventListener(PICK_VIDEOS_EVENT, open)
+  }, [])
+
+  async function handleFilesChosen(files: FileList | null) {
+    if (!files || files.length === 0) return
+    await importVideoFiles(Array.from(files))
+  }
 
   // Auto-hide the "taps to admin" chip 2.5s after the last tap.
   // The store keeps its own consecutive-tap counting — this only controls visibility.
@@ -181,20 +191,6 @@ export function AppShell() {
     }
     setTapChipVisible(false)
   }, [tapCount])
-
-  async function handleRescan() {
-    if (scanning) return
-    setScanning(true)
-    try {
-      const res = await apiPost<{ found: number; newVideos: number }>('/api/scan')
-      toast.success(`Found ${res.found} videos in library`)
-      if (res.newVideos > 0) bumpData()
-    } catch {
-      toast.error('Could not rescan the library')
-    } finally {
-      setScanning(false)
-    }
-  }
 
   const currentSortLabel = SORT_ITEMS.find((s) => s.key === librarySort)?.label ?? 'Sort'
 
@@ -278,9 +274,9 @@ export function AppShell() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuItem onSelect={() => void handleRescan()} disabled={scanning} className="gap-2.5">
-                  {scanning ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                  Rescan library
+                <DropdownMenuItem onSelect={() => requestVideoPick()} className="gap-2.5">
+                  <FolderSearch className="size-4" />
+                  Scan device storage
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setView('settings')} className="gap-2.5">
@@ -394,6 +390,24 @@ export function AppShell() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Hidden device video picker (opened via header menu / empty states / settings) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*"
+        multiple
+        className="sr-only"
+        aria-label="Import videos from device storage"
+        data-testid="video-import-input"
+        onChange={(e) => {
+          void handleFilesChosen(e.target.files)
+          e.target.value = ''
+        }}
+      />
+
+      {/* Live import progress */}
+      <UploadTray />
     </div>
   )
 }

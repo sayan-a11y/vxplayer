@@ -1,9 +1,10 @@
 'use client'
 
-// Admin shell: desktop gate, sidebar navigation, RBAC-driven visibility,
-// topbar and section switching. Renders one of the 13 views.
+// Admin shell: responsive sidebar navigation (drawer on mobile),
+// RBAC-driven visibility, topbar and section switching. Renders one
+// of the 13 views. Works on desktop, tablet and mobile browsers.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   BarChart3,
@@ -15,7 +16,7 @@ import {
   Lock,
   LogOut,
   Megaphone,
-  Monitor,
+  Menu,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -24,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useAppStore } from '@/lib/store'
 import type { AdminRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -114,15 +116,7 @@ function itemVisible(item: NavItem, role: AdminRole): boolean {
 export default function AdminApp() {
   const session = useAdminSession()
   const [section, setSection] = useState<AdminSection>('dashboard')
-  const [isDesktop, setIsDesktop] = useState<boolean | null>(null)
-
-  // Desktop gate — re-check on resize
-  useEffect(() => {
-    const check = () => setIsDesktop(window.innerWidth >= 1024)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+  const [navOpen, setNavOpen] = useState(false)
 
   const handleLogout = useCallback(() => {
     // fire & forget — global 401 handler stays quiet because token is cleared first
@@ -133,32 +127,42 @@ export default function AdminApp() {
     store.setAdminView(null)
   }, [])
 
-  if (isDesktop === null) {
-    return <div className="vx-root min-h-screen" aria-busy="true" />
-  }
-
-  if (!isDesktop) {
-    return (
-      <div className="vx-root flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
-        <div className="vx-card flex h-20 w-20 items-center justify-center rounded-3xl">
-          <Monitor className="h-10 w-10 text-violet-400" />
-        </div>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">
-          <span className="vx-accent-text">VX ADMIN</span>
-        </h1>
-        <p className="text-lg font-medium text-white/85">Desktop required.</p>
-        <p className="max-w-sm text-sm leading-relaxed text-white/45">
-          Please open the Admin Panel on a PC/Desktop browser (1024px viewport or wider).
-        </p>
-        <Button variant="outline" onClick={handleLogout} className="mt-3 h-11 border-white/15 bg-transparent text-white/70 hover:bg-white/5 hover:text-white">
-          <LogOut className="mr-2 h-4 w-4" /> Logout
-        </Button>
-      </div>
-    )
-  }
-
   const currentVisible = NAV.some((g) => g.items.some((it) => it.id === section && itemVisible(it, session.role)))
   const meta = SECTION_META[section]
+
+  function renderNav(onNavigate?: () => void) {
+    return NAV.map((group) => {
+      const items = group.items.filter((it) => itemVisible(it, session.role))
+      if (!items.length) return null
+      return (
+        <div key={group.group} className="mb-1">
+          <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/30">
+            {group.group}
+          </div>
+          {items.map((it) => (
+            <button
+              key={it.id}
+              type="button"
+              onClick={() => {
+                setSection(it.id)
+                onNavigate?.()
+              }}
+              aria-current={section === it.id ? 'page' : undefined}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                section === it.id
+                  ? 'bg-violet-500/15 font-medium text-violet-200'
+                  : 'text-white/55 hover:bg-white/5 hover:text-white',
+              )}
+            >
+              <it.icon className={cn('h-4 w-4 shrink-0', section === it.id ? 'text-violet-300' : 'text-white/40')} />
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )
+    })
+  }
 
   function renderSection() {
     if (!currentVisible) return <LockNote role={session.role} />
@@ -194,8 +198,8 @@ export default function AdminApp() {
 
   return (
     <div className="vx-root flex h-screen overflow-hidden">
-      {/* ── Sidebar ── */}
-      <aside className="vx-panel flex w-64 shrink-0 flex-col rounded-none border-y-0 border-l-0">
+      {/* ── Sidebar (tablet / desktop) ── */}
+      <aside className="vx-panel hidden w-64 shrink-0 flex-col rounded-none border-y-0 border-l-0 lg:flex">
         <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
           <div className="vx-btn-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold">
             VX
@@ -219,34 +223,7 @@ export default function AdminApp() {
         </div>
 
         <nav aria-label="Admin sections" className="vx-scroll flex-1 overflow-y-auto px-3 py-3">
-          {NAV.map((group) => {
-            const items = group.items.filter((it) => itemVisible(it, session.role))
-            if (!items.length) return null
-            return (
-              <div key={group.group} className="mb-1">
-                <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/30">
-                  {group.group}
-                </div>
-                {items.map((it) => (
-                  <button
-                    key={it.id}
-                    type="button"
-                    onClick={() => setSection(it.id)}
-                    aria-current={section === it.id ? 'page' : undefined}
-                    className={cn(
-                      'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                      section === it.id
-                        ? 'bg-violet-500/15 font-medium text-violet-200'
-                        : 'text-white/55 hover:bg-white/5 hover:text-white'
-                    )}
-                  >
-                    <it.icon className={cn('h-4 w-4 shrink-0', section === it.id ? 'text-violet-300' : 'text-white/40')} />
-                    {it.label}
-                  </button>
-                ))}
-              </div>
-            )
-          })}
+          {renderNav()}
         </nav>
 
         <div className="border-t border-white/[0.07] p-3">
@@ -262,15 +239,27 @@ export default function AdminApp() {
 
       {/* ── Main column ── */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-white/[0.07] px-6 lg:px-8">
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-tight text-white">{meta.title}</h1>
-            <p className="truncate text-xs text-white/40">{meta.sub}</p>
+        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {/* Mobile nav drawer trigger */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-10 shrink-0 rounded-xl text-white/70 hover:bg-white/5 hover:text-white lg:hidden"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open admin menu"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold tracking-tight text-white sm:text-lg">{meta.title}</h1>
+              <p className="hidden truncate text-xs text-white/40 sm:block">{meta.sub}</p>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <RoleBadge role={session.role} />
             <div className="hidden items-center gap-2 border-l border-white/10 pl-3 sm:flex">
-              <span className="text-sm text-white/75">{session.name || 'Admin'}</span>
+              <span className="truncate text-sm text-white/75">{session.name || 'Admin'}</span>
               <span className="relative flex h-2 w-2" title="Online">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
@@ -285,12 +274,54 @@ export default function AdminApp() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="mx-auto max-w-[1200px] space-y-6 p-6 lg:p-8"
+            className="mx-auto max-w-[1200px] space-y-6 p-4 sm:p-6 lg:p-8"
           >
             {renderSection()}
           </motion.div>
         </main>
       </div>
+
+      {/* ── Mobile nav drawer ── */}
+      <Sheet open={navOpen} onOpenChange={setNavOpen}>
+        <SheetContent side="left" className="vx-scroll w-72 max-w-[85vw] overflow-y-auto rounded-none border-y-0 border-l-0 border-white/[0.07] bg-[#0a0b1c] p-0">
+          <SheetHeader className="border-b border-white/[0.07] px-5 py-4 text-left">
+            <SheetTitle className="flex items-center gap-3 text-sm font-bold tracking-tight text-white">
+              <span className="vx-btn-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-black">
+                VX
+              </span>
+              VX <span className="vx-accent-text">ADMIN</span>
+            </SheetTitle>
+            <SheetDescription className="sr-only">Admin panel navigation</SheetDescription>
+          </SheetHeader>
+
+          <div className="border-b border-white/[0.07] px-5 py-3">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-medium text-white">{session.name || 'Admin'}</span>
+              <span className="relative flex h-2 w-2 shrink-0" title="Online">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+            </div>
+            <div className="mt-1.5">
+              <RoleBadge role={session.role} />
+            </div>
+          </div>
+
+          <nav aria-label="Admin sections mobile" className="px-3 py-3">
+            {renderNav(() => setNavOpen(false))}
+          </nav>
+
+          <div className="border-t border-white/[0.07] p-3">
+            <Button
+              variant="ghost"
+              onClick={handleLogout}
+              className="h-10 w-full justify-start text-white/55 hover:bg-red-500/10 hover:text-red-300"
+            >
+              <LogOut className="mr-2 h-4 w-4" /> Logout
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

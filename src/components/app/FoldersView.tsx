@@ -1,11 +1,13 @@
 'use client'
 
 import Image from 'next/image'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, FolderSearch } from 'lucide-react'
 
 import { formatSize } from '@/lib/format'
+import { requestVideoPick } from '@/lib/import-client'
 import { useAppStore } from '@/lib/store'
 import type { VideoDTO } from '@/lib/types'
+import { Button } from '@/components/ui/button'
 
 import { EmptyState, ErrorState, VideoGridSkeleton, useVideos } from './VideosView'
 import { VideosView } from './VideosView'
@@ -77,7 +79,16 @@ export function FoldersView() {
         <EmptyState
           icon={FolderOpen}
           title="No folders found"
-          hint="Rescan your library from the header menu to discover video folders."
+          hint="Import videos from this device's storage to build your library."
+          action={
+            <Button
+              onClick={() => requestVideoPick()}
+              className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
+            >
+              <FolderSearch className="size-4" />
+              Scan device storage
+            </Button>
+          }
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

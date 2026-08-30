@@ -5,7 +5,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, ScrollText } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDateTime } from '@/lib/format'
@@ -99,8 +98,8 @@ export default function AuditView() {
         ) : filtered.length === 0 ? (
           <EmptyState icon={ScrollText} title="No matching audit entries" hint="Try a different filter or clear the search." />
         ) : (
-          <ScrollArea className="h-[560px]">
-            <Table>
+          <div className="vx-scroll max-h-[560px] overflow-auto">
+            <Table className="min-w-[720px]">
               <TableHeader>
                 <TableRow className="border-white/[0.07] hover:bg-transparent">
                   <TableHead className="text-white/45">Time</TableHead>
@@ -136,7 +135,7 @@ export default function AuditView() {
                 })}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         )}
       </div>
     </div>

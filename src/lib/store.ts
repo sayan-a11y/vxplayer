@@ -15,6 +15,14 @@ export type AppView =
 
 const SESSION_ID_KEY = 'vx_session_id'
 
+export type UploadTask = {
+  id: string
+  name: string
+  pct: number
+  status: 'uploading' | 'processing' | 'done' | 'error'
+  error?: string
+}
+
 function getSessionId(): string {
   if (typeof window === 'undefined') return ''
   let id = window.localStorage.getItem(SESSION_ID_KEY)
@@ -56,6 +64,11 @@ type AppState = {
   /** current folder being browsed (null = all) */
   activeFolder: string | null
   setActiveFolder: (f: string | null) => void
+
+  // ── Device imports (upload tray) ──
+  uploads: UploadTask[]
+  upsertUpload: (task: UploadTask) => void
+  removeUpload: (id: string) => void
 
   // ── Session / ads ──
   sessionId: string
@@ -125,6 +138,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   setHiddenFolders: (folders) => set({ hiddenFolders: folders }),
   activeFolder: null,
   setActiveFolder: (f) => set({ activeFolder: f }),
+
+  uploads: [],
+  upsertUpload: (task) =>
+    set((s) => {
+      const idx = s.uploads.findIndex((u) => u.id === task.id)
+      if (idx === -1) return { uploads: [...s.uploads, task] }
+      const next = [...s.uploads]
+      next[idx] = task
+      return { uploads: next }
+    }),
+  removeUpload: (id) => set((s) => ({ uploads: s.uploads.filter((u) => u.id !== id) })),
 
   sessionId: '',
   offlineMode: false,

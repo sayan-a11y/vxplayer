@@ -8,18 +8,19 @@ import {
   Eye,
   EyeOff,
   FolderOpen,
+  FolderSearch,
   Loader2,
   Palette,
   PlayCircle,
-  RefreshCw,
   ShieldCheck,
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api'
+import { apiDelete, apiGet, apiPatch } from '@/lib/api'
 import { clearCache, readCache, refreshAdCache } from '@/lib/ads-client'
+import { requestVideoPick } from '@/lib/import-client'
 import { useAppStore } from '@/lib/store'
 import { SPEED_OPTIONS, type SettingsDTO, type VideoDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -163,7 +164,6 @@ export function SettingsView() {
   const [draft, setDraft] = useState<SettingsDTO | null>(() => useAppStore.getState().settings)
   const [error, setError] = useState(false)
   const [folders, setFolders] = useState<string[]>([])
-  const [scanning, setScanning] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
   const load = useCallback(async () => {
@@ -213,18 +213,8 @@ export function SettingsView() {
       })
   }
 
-  async function handleRescan() {
-    if (scanning) return
-    setScanning(true)
-    try {
-      const res = await apiPost<{ found: number; newVideos: number }>('/api/scan')
-      toast.success(`Found ${res.found} videos`)
-      if (res.newVideos > 0) bumpData()
-    } catch {
-      toast.error('Could not rescan the library')
-    } finally {
-      setScanning(false)
-    }
+  function handleScanStorage() {
+    requestVideoPick()
   }
 
   async function handleSyncAdCache() {
@@ -453,19 +443,18 @@ export function SettingsView() {
         </div>
         <div className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
           <div className="min-w-0">
-            <Label className="text-sm font-medium">Rescan library</Label>
+            <Label className="text-sm font-medium">Scan device storage</Label>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Look for new videos on this device.
+              Import videos from this device's storage into your library.
             </p>
           </div>
           <Button
             variant="outline"
-            onClick={() => void handleRescan()}
-            disabled={scanning}
+            onClick={handleScanStorage}
             className="min-h-10 gap-2 rounded-xl"
           >
-            {scanning ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            Rescan
+            <FolderSearch className="size-4" />
+            Scan
           </Button>
         </div>
       </SectionCard>

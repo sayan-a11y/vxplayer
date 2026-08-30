@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowLeft, FolderOpen, RefreshCw, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, FolderOpen, FolderSearch, RefreshCw, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { apiGet } from '@/lib/api'
+import { requestVideoPick } from '@/lib/import-client'
 import { useAppStore } from '@/lib/store'
 import type { VideoDTO } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -172,7 +173,18 @@ export function VideosView() {
           hint={
             activeFolder
               ? 'This folder has no playable videos yet.'
-              : 'Add videos to your device, or use “Rescan library” from the header menu.'
+              : 'Import videos from this device’s storage to start watching.'
+          }
+          action={
+            !activeFolder && (
+              <Button
+                onClick={() => requestVideoPick()}
+                className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
+              >
+                <FolderSearch className="size-4" />
+                Scan device storage
+              </Button>
+            )
           }
         />
       ) : (
