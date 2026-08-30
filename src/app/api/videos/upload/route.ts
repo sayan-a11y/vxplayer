@@ -9,6 +9,7 @@ import { promisify } from 'util'
 import crypto from 'crypto'
 
 import { db } from '@/lib/db'
+import { queueTranscode } from '@/lib/transcode'
 import type { VideoDTO } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -153,6 +154,8 @@ function serialize(row: UploadedVideoRow): VideoDTO {
     addedAt: row.addedAt.toISOString(),
     favorite: false,
     history: null,
+    // Variants are generated in the background right after this response.
+    qualities: [],
   }
 }
 
@@ -242,6 +245,9 @@ export async function POST(req: Request) {
         thumbnailUrl,
       },
     })
+
+    // Generate 140p → 2K quality variants in the background (non-blocking).
+    queueTranscode(row.id)
 
     return NextResponse.json({ video: serialize(row), duplicate: false }, { status: 201 })
   } catch (err) {

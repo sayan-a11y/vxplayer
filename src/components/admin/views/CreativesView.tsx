@@ -82,12 +82,20 @@ export default function CreativesView() {
                   <TableRow key={c.id} className="border-white/[0.06]">
                     <TableCell>
                       {c.mediaUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={c.mediaUrl}
-                          alt={`Preview of ${c.name}`}
-                          className="h-9 w-16 rounded-md border border-white/10 object-cover"
-                        />
+                        c.type === 'VIDEO' ? (
+                          <video
+                            src={c.mediaUrl}
+                            muted
+                            preload="metadata"
+                            className="h-9 w-16 rounded-md border border-white/10 bg-black object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={c.mediaUrl}
+                            alt={`Preview of ${c.name}`}
+                            className="h-9 w-16 rounded-md border border-white/10 bg-black object-cover"
+                          />
+                        )
                       ) : (
                         <div className="flex h-9 w-16 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.03] text-[10px] text-white/30">
                           {c.type}

@@ -1,41 +1,9 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import type { HistoryEntry, Video } from '@prisma/client'
-import type { VideoDTO } from '@/lib/types'
+
+import { toVideoDTO } from './serialize'
 
 export const dynamic = 'force-dynamic'
-
-type VideoWithHistory = Video & { history: HistoryEntry | null }
-
-/** Serialize a Prisma Video (with optional history) into the contract VideoDTO. */
-function toVideoDTO(v: VideoWithHistory): VideoDTO {
-  return {
-    id: v.id,
-    title: v.title,
-    fileName: v.fileName,
-    folder: v.folder,
-    duration: v.duration,
-    width: v.width,
-    height: v.height,
-    resolutionLabel: v.resolutionLabel,
-    sizeMB: v.sizeMB,
-    codec: v.codec,
-    audioCodec: v.audioCodec,
-    container: v.container,
-    frameRate: v.frameRate,
-    srcUrl: v.srcUrl,
-    thumbnailUrl: v.thumbnailUrl,
-    addedAt: v.addedAt.toISOString(),
-    favorite: v.favorite,
-    history: v.history
-      ? {
-          position: v.history.position,
-          watchedPct: v.history.watchedPct,
-          lastPlayedAt: v.history.lastPlayedAt.toISOString(),
-        }
-      : null,
-  }
-}
 
 const SORTS = ['recent_added', 'recent_played', 'name', 'duration', 'size'] as const
 type SortKey = (typeof SORTS)[number]
@@ -75,7 +43,7 @@ export async function GET(req: Request) {
     const rows = await db.video.findMany({
       where,
       orderBy,
-      include: { history: true },
+      include: { history: true, qualities: true },
     })
 
     if (sort === 'recent_played') {

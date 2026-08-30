@@ -2,14 +2,24 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Folder, Heart, HeartOff, Info, ListPlus, MoreVertical, Play } from 'lucide-react'
+import { Folder, Heart, HeartOff, Info, ListPlus, MoreVertical, Play, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { apiPost } from '@/lib/api'
+import { apiDelete, apiPost } from '@/lib/api'
 import { formatDuration, formatSize } from '@/lib/format'
 import { useAppStore } from '@/lib/store'
 import type { VideoDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +46,8 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
   const [favBusy, setFavBusy] = useState(false)
   const [playlistOpen, setPlaylistOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   const watched = video.history?.watchedPct ?? 0
   const showProgress = video.history !== null && watched > 0 && watched < 95
@@ -55,6 +67,25 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
       toast.error('Could not update favorite')
     } finally {
       setFavBusy(false)
+    }
+  }
+
+  async function deleteVideo() {
+    if (deleteBusy) return
+    setDeleteBusy(true)
+    try {
+      await apiDelete(`/api/videos/${video.id}`)
+      // Close the player if this exact video is on screen.
+      if (useAppStore.getState().playerVideo?.id === video.id) {
+        useAppStore.getState().closePlayer()
+      }
+      toast.success(`"${video.title}" deleted`)
+      setDeleteOpen(false)
+      bumpData()
+    } catch {
+      toast.error('Could not delete this video')
+    } finally {
+      setDeleteBusy(false)
     }
   }
 
@@ -140,6 +171,14 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
                   {video.favorite ? <HeartOff className="size-4" /> : <Heart className="size-4" />}
                   {video.favorite ? 'Unfavorite' : 'Favorite'}
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => setDeleteOpen(true)}
+                  className="gap-2.5 text-red-300 focus:bg-red-500/10 focus:text-red-200"
+                >
+                  <Trash2 className="size-4" />
+                  Delete video
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -163,6 +202,31 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
 
       <AddToPlaylistDialog video={video} open={playlistOpen} onOpenChange={setPlaylistOpen} />
       <VideoInfoSheet video={video} open={infoOpen} onOpenChange={setInfoOpen} />
+
+      <AlertDialog open={deleteOpen} onOpenChange={(o) => !deleteBusy && setDeleteOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{video.title}" will be permanently removed from your library — including its quality
+              variants, watch history and playlist entries. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteBusy}
+              onClick={(e) => {
+                e.preventDefault()
+                void deleteVideo()
+              }}
+              className="bg-red-600 text-white hover:bg-red-500"
+            >
+              {deleteBusy ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

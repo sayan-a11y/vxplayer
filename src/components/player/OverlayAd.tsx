@@ -99,12 +99,16 @@ export default function OverlayAd({ ad, videoId, onClose }: OverlayAdProps) {
         transition={{ duration: 0.2, ease: 'easeOut' }}
         className="pointer-events-auto"
       >
-        {ad.type === 'IMAGE' && ad.mediaUrl ? (
+        {(ad.type === 'IMAGE' || ad.type === 'OVERLAY' || ad.type === 'BANNER') && ad.mediaUrl ? (
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/75 shadow-2xl backdrop-blur-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={ad.mediaUrl}
               alt={ad.headline ?? 'Sponsored'}
-              className="max-h-28 w-full object-cover"
+              className="max-h-36 w-full object-cover sm:max-h-52"
+              onError={(e) => {
+                ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+              }}
             />
             <div className="flex items-center gap-2 p-2.5">
               <div className="min-w-0 flex-1">

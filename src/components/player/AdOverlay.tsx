@@ -60,8 +60,9 @@ export default function AdOverlay({ ad, phase, videoId, onComplete }: AdOverlayP
   // IMPRESSION on mount
   useEffect(() => {
     fire('IMPRESSION')
-    if (!ad.mediaUrl) fire('START')
-  }, [fire, ad.mediaUrl])
+    // Image ads (and missing media) have no play event — start the clock now.
+    if (!ad.mediaUrl || ad.type === 'IMAGE') fire('START')
+  }, [fire, ad.mediaUrl, ad.type])
 
   // Ticker: prefers real video time; falls back to a wall-clock simulation
   // when the media is missing or failed so the flow never gets stuck.
@@ -109,7 +110,8 @@ export default function AdOverlay({ ad, phase, videoId, onComplete }: AdOverlayP
     complete(true)
   }
 
-  const showVideo = Boolean(ad.mediaUrl) && !errored
+  const showMedia = Boolean(ad.mediaUrl) && !errored
+  const isImage = ad.type === 'IMAGE'
 
   return (
     <motion.div
@@ -119,7 +121,20 @@ export default function AdOverlay({ ad, phase, videoId, onComplete }: AdOverlayP
       transition={{ duration: 0.2 }}
       className="absolute inset-0 z-50 bg-black"
     >
-      {showVideo ? (
+      {showMedia && isImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={ad.mediaUrl ?? undefined}
+          alt={ad.headline ?? 'Advertisement'}
+          className="h-full w-full object-contain"
+          draggable={false}
+          onError={() => {
+            erroredRef.current = true
+            setErrored(true)
+            fire('ERROR')
+          }}
+        />
+      ) : showMedia ? (
         <video
           ref={videoRef}
           src={ad.mediaUrl ?? undefined}

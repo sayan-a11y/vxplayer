@@ -41,7 +41,8 @@ export function allowedCreativeTypes(placement: AdPlacement): string[] {
     case 'PRE_ROLL':
     case 'MID_ROLL':
     case 'POST_ROLL':
-      return ['VIDEO']
+      // Video rolls also serve IMAGE creatives as timed display spots.
+      return ['VIDEO', 'IMAGE']
     case 'OVERLAY':
       return ['IMAGE', 'OVERLAY', 'TEXT']
     case 'BANNER':

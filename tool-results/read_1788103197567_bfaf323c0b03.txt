@@ -1,0 +1,1074 @@
+     1→'use client'
+     2→
+     3→import {
+     4→  useCallback,
+     5→  useEffect,
+     6→  useMemo,
+     7→  useRef,
+     8→  useState,
+     9→  type CSSProperties,
+    10→} from 'react'
+    11→import { AnimatePresence, motion } from 'framer-motion'
+    12→import {
+    13→  ChevronDown,
+    14→  FastForward,
+    15→  Loader2,
+    16→  Lock,
+    17→  LockOpen,
+    18→  PictureInPicture2,
+    19→  Rewind,
+    20→  Sun,
+    21→  TriangleAlert,
+    22→  Volume2,
+    23→} from 'lucide-react'
+    24→import { toast } from 'sonner'
+    25→import { Button } from '@/components/ui/button'
+    26→import { useAppStore } from '@/lib/store'
+    27→import { requestAd, trackAdEvent } from '@/lib/ads-client'
+    28→import { apiPost } from '@/lib/api'
+    29→import { generateDemoCues } from '@/lib/vtt'
+    30→import { formatDuration } from '@/lib/format'
+    31→import type { AspectMode, ServedAd } from '@/lib/types'
+    32→import AdOverlay, { type AdPhase } from './AdOverlay'
+    33→import GestureLayer from './GestureLayer'
+    34→import OverlayAd from './OverlayAd'
+    35→import PlayerControls from './PlayerControls'
+    36→import SubtitleRenderer, { type SubtitleSize } from './SubtitleRenderer'
+    37→
+    38→type Osd =
+    39→  | { kind: 'brightness'; value: number; key: number }
+    40→  | { kind: 'volume'; value: number; key: number }
+    41→  | { kind: 'seek'; icon: 'fwd' | 'back'; text: string; key: number }
+    42→
+    43→type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+    44→type OsdInput = DistributiveOmit<Osd, 'key'>
+    45→
+    46→type AdState = { ad: ServedAd; phase: AdPhase }
+    47→
+    48→const MID_ROLL_THRESHOLDS: Record<number, number[]> = {
+    49→  0: [],
+    50→  1: [0.5],
+    51→  2: [0.33, 0.66],
+    52→  3: [0.25, 0.5, 0.75],
+    53→}
+    54→
+    55→/** Hold-to-unlock button with a 1.2s progress ring. */
+    56→function LockOverlay({ onUnlock }: { onUnlock: () => void }) {
+    57→  const [holding, setHolding] = useState(false)
+    58→  const timerRef = useRef<number | null>(null)
+    59→  const C = 2 * Math.PI * 26
+    60→
+    61→  const start = () => {
+    62→    setHolding(true)
+    63→    if (timerRef.current) window.clearTimeout(timerRef.current)
+    64→    timerRef.current = window.setTimeout(onUnlock, 1200)
+    65→  }
+    66→  const cancel = () => {
+    67→    setHolding(false)
+    68→    if (timerRef.current) {
+    69→      window.clearTimeout(timerRef.current)
+    70→      timerRef.current = null
+    71→    }
+    72→  }
+    73→  useEffect(
+    74→    () => () => {
+    75→      if (timerRef.current) window.clearTimeout(timerRef.current)
+    76→    },
+    77→    []
+    78→  )
+    79→
+    80→  return (
+    81→    <div className="absolute inset-x-0 top-0 z-30 flex flex-col items-center gap-4 pt-5">
+    82→      <motion.div
+    83→        initial={{ opacity: 0, y: -8 }}
+    84→        animate={{ opacity: 1, y: 0 }}
+    85→        transition={{ duration: 0.2 }}
+    86→        className="flex items-center gap-2 rounded-full border border-white/10 bg-black/60 px-4 py-2 backdrop-blur"
+    87→      >
+    88→        <Lock className="h-3.5 w-3.5 text-white/80" />
+    89→        <span className="text-xs text-white/80">Player locked — hold to unlock</span>
+    90→      </motion.div>
+    91→      <button
+    92→        aria-label="Hold 1.2 seconds to unlock"
+    93→        onPointerDown={start}
+    94→        onPointerUp={cancel}
+    95→        onPointerLeave={cancel}
+    96→        onPointerCancel={cancel}
+    97→        onContextMenu={(e) => e.preventDefault()}
+    98→        className="relative flex h-14 w-14 touch-none items-center justify-center rounded-full border border-white/15 bg-black/60 text-white/90 backdrop-blur active:scale-95"
+    99→      >
+   100→        <svg viewBox="0 0 56 56" className="absolute inset-0 h-full w-full -rotate-90">
+   101→          <circle cx="28" cy="28" r="26" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
+   102→          <circle
+   103→            cx="28"
+   104→            cy="28"
+   105→            r="26"
+   106→            fill="none"
+   107→            stroke="var(--vx-accent)"
+   108→            strokeWidth="3"
+   109→            strokeLinecap="round"
+   110→            strokeDasharray={C}
+   111→            strokeDashoffset={holding ? 0 : C}
+   112→            style={{ transition: holding ? 'stroke-dashoffset 1.2s linear' : 'stroke-dashoffset 0.25s ease' }}
+   113→          />
+   114→        </svg>
+   115→        <LockOpen className="h-5 w-5" />
+   116→      </button>
+   117→    </div>
+   118→  )
+   119→}
+   120→
+   121→/**
+   122→ * Full-screen immersive player + ad engine.
+   123→ * Rendered globally when store.playerVideo !== null.
+   124→ */
+   125→export default function PlayerScreen() {
+   126→  const video = useAppStore((s) => s.playerVideo)
+   127→  const settings = useAppStore((s) => s.settings)
+   128→  const queueLength = useAppStore((s) => s.playerQueue.length)
+   129→
+   130→  const containerRef = useRef<HTMLDivElement>(null)
+   131→  const videoRef = useRef<HTMLVideoElement>(null)
+   132→
+   133→  // playback state
+   134→  const [playing, setPlaying] = useState(false)
+   135→  const [currentTime, setCurrentTime] = useState(0)
+   136→  const [duration, setDuration] = useState(0)
+   137→  const [buffered, setBuffered] = useState(0)
+   138→  const [waiting, setWaiting] = useState(false)
+   139→  const [error, setError] = useState<string | null>(null)
+   140→  const [errorDetails, setErrorDetails] = useState(false)
+   141→
+   142→  // visual state
+   143→  const [brightness, setBrightness] = useState(1)
+   144→  const [volume, setVolume] = useState(1)
+   145→  const [muted, setMuted] = useState(false)
+   146→  const [speed, setSpeed] = useState(1)
+   147→  const [aspect, setAspect] = useState<AspectMode>('Fit')
+   148→  const [rotation, setRotation] = useState(0)
+   149→  const [natural, setNatural] = useState({ w: 0, h: 0 })
+   150→  const [isFullscreen, setIsFullscreen] = useState(false)
+   151→  const [pipActive, setPipActive] = useState(false)
+   152→
+   153→  // subtitles / audio
+   154→  const [subtitlesOn, setSubtitlesOn] = useState(true)
+   155→  const [subDelay, setSubDelay] = useState(0)
+   156→  const [subSize, setSubSize] = useState<SubtitleSize>('M')
+   157→  const [subBgOpacity, setSubBgOpacity] = useState(40)
+   158→  const [subPositionPct, setSubPositionPct] = useState(85)
+   159→  const [audioTrack, setAudioTrack] = useState('English 5.1 (AAC)')
+   160→
+   161→  // ui state
+   162→  const [controlsVisible, setControlsVisible] = useState(true)
+   163→  const [osd, setOsd] = useState<Osd | null>(null)
+   164→  const [locked, setLocked] = useState(false)
+   165→
+   166→  // ad machine
+   167→  const [startupGate, setStartupGate] = useState(false)
+   168→  const [activeAd, setActiveAd] = useState<AdState | null>(null)
+   169→  const [overlayAd, setOverlayAd] = useState<ServedAd | null>(null)
+   170→  const [mainStarted, setMainStarted] = useState(false)
+   171→
+   172→  // refs
+   173→  const hideTimerRef = useRef<number | null>(null)
+   174→  const osdTimerRef = useRef<number | null>(null)
+   175→  const lastSaveRef = useRef<number>(0)
+   176→  const positionRef = useRef<{ id: string; time: number; dur: number } | null>(null)
+   177→  const endedRef = useRef(false)
+   178→  const midRollFetchingRef = useRef(false)
+   179→  const overlayShownRef = useRef(false)
+   180→  const userPausedRef = useRef(false)
+   181→  const resumeAppliedRef = useRef<string | null>(null)
+   182→  const speedTouchedRef = useRef(false)
+   183→  const subSyncedRef = useRef(false)
+   184→  const adRef = useRef<AdState | null>(null)
+   185→
+   186→  const videoId = video?.id ?? null
+   187→  const pipSupported =
+   188→    typeof document !== 'undefined' && 'pictureInPictureEnabled' in document
+   189→
+   190→  useEffect(() => {
+   191→    adRef.current = activeAd
+   192→  }, [activeAd])
+   193→
+   194→  // Track PiP state via media events (React types don't expose these props)
+   195→  useEffect(() => {
+   196→    const v = videoRef.current
+   197→    if (!v) return
+   198→    const enter = () => setPipActive(true)
+   199→    const leave = () => setPipActive(false)
+   200→    v.addEventListener('enterpictureinpicture', enter)
+   201→    v.addEventListener('leavepictureinpicture', leave)
+   202→    return () => {
+   203→      v.removeEventListener('enterpictureinpicture', enter)
+   204→      v.removeEventListener('leavepictureinpicture', leave)
+   205→    }
+   206→  }, [videoId])
+   207→
+   208→  // ── OSD helpers ──────────────────────────────────────────────
+   209→  const showOsd = useCallback((o: OsdInput) => {
+   210→    setOsd({ ...o, key: Date.now() } as Osd)
+   211→    if (osdTimerRef.current) window.clearTimeout(osdTimerRef.current)
+   212→    osdTimerRef.current = window.setTimeout(() => {
+   213→      osdTimerRef.current = null
+   214→      setOsd(null)
+   215→    }, 800)
+   216→  }, [])
+   217→
+   218→  const showSeekOsd = useCallback(
+   219→    (deltaSec: number, target: number) => {
+   220→      const d = Math.round(deltaSec)
+   221→      showOsd({
+   222→        kind: 'seek',
+   223→        icon: d >= 0 ? 'fwd' : 'back',
+   224→        text: `${d >= 0 ? '+' : ''}${d}s / ${formatDuration(target)}`,
+   225→      })
+   226→    },
+   227→    [showOsd]
+   228→  )
+   229→
+   230→  // ── Playback handlers (stable, ref-based) ────────────────────
+   231→  const stepSeek = useCallback(
+   232→    (d: number) => {
+   233→      const v = videoRef.current
+   234→      const vid = useAppStore.getState().playerVideo
+   235→      if (!v || !vid) return
+   236→      const dur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : vid.duration
+   237→      const t = Math.min(Math.max(0, v.currentTime + d), dur)
+   238→      v.currentTime = t
+   239→      setCurrentTime(t)
+   240→      showSeekOsd(d, t)
+   241→    },
+   242→    [showSeekOsd]
+   243→  )
+   244→
+   245→  const applyVolume = useCallback(
+   246→    (nv: number) => {
+   247→      const v = videoRef.current
+   248→      setVolume(nv)
+   249→      if (v) {
+   250→        v.volume = nv
+   251→        if (nv > 0 && v.muted) {
+   252→          v.muted = false
+   253→          setMuted(false)
+   254→        }
+   255→      }
+   256→      showOsd({ kind: 'volume', value: nv })
+   257→    },
+   258→    [showOsd]
+   259→  )
+   260→
+   261→  const handleBrightness = useCallback(
+   262→    (v: number) => {
+   263→      setBrightness(v)
+   264→      showOsd({ kind: 'brightness', value: v })
+   265→    },
+   266→    [showOsd]
+   267→  )
+   268→
+   269→  const handleSeekCommit = useCallback(
+   270→    (target: number, delta: number) => {
+   271→      const v = videoRef.current
+   272→      const vid = useAppStore.getState().playerVideo
+   273→      if (!v || !vid) return
+   274→      const dur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : vid.duration
+   275→      const t = Math.min(Math.max(0, target), dur)
+   276→      v.currentTime = t
+   277→      setCurrentTime(t)
+   278→      showSeekOsd(delta, t)
+   279→    },
+   280→    [showSeekOsd]
+   281→  )
+   282→
+   283→  const handleSeekPreview = useCallback(
+   284→    (target: number | null, delta: number) => {
+   285→      if (target === null) {
+   286→        if (osdTimerRef.current) {
+   287→          window.clearTimeout(osdTimerRef.current)
+   288→          osdTimerRef.current = null
+   289→        }
+   290→        setOsd(null)
+   291→        return
+   292→      }
+   293→      const d = Math.round(delta)
+   294→      showOsd({
+   295→        kind: 'seek',
+   296→        icon: d >= 0 ? 'fwd' : 'back',
+   297→        text: `${d >= 0 ? '+' : ''}${d}s / ${formatDuration(target)}`,
+   298→      })
+   299→    },
+   300→    [showOsd]
+   301→  )
+   302→
+   303→  const togglePlay = useCallback(() => {
+   304→    const v = videoRef.current
+   305→    if (!v) return
+   306→    if (v.paused) {
+   307→      userPausedRef.current = false
+   308→      void v.play().catch(() => {})
+   309→    } else {
+   310→      userPausedRef.current = true
+   311→      v.pause()
+   312→    }
+   313→  }, [])
+   314→
+   315→  const toggleControls = useCallback(() => {
+   316→    setControlsVisible((prev) => !prev)
+   317→  }, [])
+   318→
+   319→  // ── Controls auto-hide (3s) ──────────────────────────────────
+   320→  const armHideTimer = useCallback(() => {
+   321→    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+   322→    hideTimerRef.current = window.setTimeout(() => {
+   323→      hideTimerRef.current = null
+   324→      setControlsVisible(false)
+   325→    }, 3000)
+   326→  }, [])
+   327→
+   328→  const holdVisibility = useCallback(
+   329→    (active: boolean) => {
+   330→      if (active) {
+   331→        if (hideTimerRef.current) {
+   332→          window.clearTimeout(hideTimerRef.current)
+   333→          hideTimerRef.current = null
+   334→        }
+   335→      } else {
+   336→        armHideTimer()
+   337→      }
+   338→    },
+   339→    [armHideTimer]
+   340→  )
+   341→
+   342→  useEffect(() => {
+   343→    if (!playing || activeAd || locked || error) {
+   344→      if (hideTimerRef.current) {
+   345→        window.clearTimeout(hideTimerRef.current)
+   346→        hideTimerRef.current = null
+   347→      }
+   348→      if (!playing) setControlsVisible(true)
+   349→      return
+   350→    }
+   351→    if (controlsVisible) armHideTimer()
+   352→  }, [playing, controlsVisible, activeAd, locked, error, armHideTimer])
+   353→
+   354→  // ── Settings → subtitle prefs (once) ─────────────────────────
+   355→  useEffect(() => {
+   356→    if (!settings || subSyncedRef.current) return
+   357→    subSyncedRef.current = true
+   358→    setSubSize(settings.subtitleSize)
+   359→    setSubBgOpacity(settings.subtitleBgOpacity)
+   360→    setSubPositionPct(settings.subtitlePosition)
+   361→  }, [settings])
+   362→
+   363→  // Apply defaultSpeed as soon as settings are known (unless user chose one)
+   364→  useEffect(() => {
+   365→    if (!settings || speedTouchedRef.current) return
+   366→    const v = videoRef.current
+   367→    if (v) v.playbackRate = settings.defaultSpeed
+   368→    setSpeed(settings.defaultSpeed)
+   369→  }, [settings])
+   370→
+   371→  // ── Per-video lifecycle: resets + PRE_ROLL + save on leave ───
+   372→  useEffect(() => {
+   373→    if (!videoId) return
+   374→    const store = useAppStore.getState()
+   375→    const s = store.settings
+   376→
+   377→    endedRef.current = false
+   378→    midRollFetchingRef.current = false
+   379→    overlayShownRef.current = false
+   380→    userPausedRef.current = false
+   381→    speedTouchedRef.current = false
+   382→    lastSaveRef.current = Date.now()
+   383→    setError(null)
+   384→    setErrorDetails(false)
+   385→    setWaiting(true)
+   386→    setCurrentTime(0)
+   387→    setBuffered(0)
+   388→    setActiveAd(null)
+   389→    setOverlayAd(null)
+   390→    setMainStarted(false)
+   391→    store.resetMidRolls()
+   392→
+   393→    // PRE_ROLL on every video open
+   394→    if (s && s.adsEnabled) {
+   395→      setStartupGate(true)
+   396→      requestAd({ placement: 'PRE_ROLL', videoId })
+   397→        .then((a) => {
+   398→          setStartupGate(false)
+   399→          if (a) setActiveAd({ ad: a, phase: 'pre' })
+   400→        })
+   401→        .catch(() => setStartupGate(false))
+   402→    } else {
+   403→      setStartupGate(false)
+   404→    }
+   405→
+   406→    return () => {
+   407→      // fire-and-forget progress save for the video being left
+   408→      const p = positionRef.current
+   409→      if (p && p.id === videoId) {
+   410→        void apiPost('/api/history', {
+   411→          videoId: p.id,
+   412→          position: Math.floor(p.time),
+   413→          duration: Math.floor(p.dur || 0),
+   414→        }).catch(() => {})
+   415→      }
+   416→    }
+   417→  }, [videoId])
+   418→
+   419→  // ── Play gate: main video only plays when no ad is active ────
+   420→  useEffect(() => {
+   421→    if (!videoId) return
+   422→    const v = videoRef.current
+   423→    if (!v) return
+   424→    if (startupGate || activeAd) {
+   425→      if (!v.paused) v.pause()
+   426→      return
+   427→    }
+   428→    if (userPausedRef.current || v.ended) return
+   429→    const p = v.play()
+   430→    if (p && typeof p.catch === 'function') p.catch(() => {})
+   431→  }, [startupGate, activeAd, videoId])
+   432→
+   433→  // ── OVERLAY ad: once per video, 20s after main playback starts
+   434→  useEffect(() => {
+   435→    if (!videoId || !mainStarted) return
+   436→    const t = window.setTimeout(() => {
+   437→      if (overlayShownRef.current || adRef.current) return
+   438→      overlayShownRef.current = true
+   439→      requestAd({ placement: 'OVERLAY', videoId })
+   440→        .then((a) => {
+   441→          if (a) {
+   442→            void trackAdEvent(a, 'IMPRESSION', videoId)
+   443→            setOverlayAd(a)
+   444→          }
+   445→        })
+   446→        .catch(() => {})
+   447→    }, 20000)
+   448→    return () => window.clearTimeout(t)
+   449→  }, [mainStarted, videoId])
+   450→
+   451→  // ── Fullscreen tracking ──────────────────────────────────────
+   452→  useEffect(() => {
+   453→    const onFs = () => setIsFullscreen(Boolean(document.fullscreenElement))
+   454→    document.addEventListener('fullscreenchange', onFs)
+   455→    return () => document.removeEventListener('fullscreenchange', onFs)
+   456→  }, [])
+   457→
+   458→  // ── Keyboard niceties ────────────────────────────────────────
+   459→  useEffect(() => {
+   460→    if (!videoId) return
+   461→    const onKey = (e: KeyboardEvent) => {
+   462→      if (adRef.current || locked) return
+   463→      const t = e.target as HTMLElement | null
+   464→      if (
+   465→        t &&
+   466→        (t.tagName === 'INPUT' ||
+   467→          t.tagName === 'TEXTAREA' ||
+   468→          t.tagName === 'SELECT' ||
+   469→          t.isContentEditable ||
+   470→          t.closest('button, a, [role=slider], [data-radix-popper-content-wrapper]'))
+   471→      ) {
+   472→        return
+   473→      }
+   474→      const v = videoRef.current
+   475→      if (!v) return
+   476→      switch (e.code) {
+   477→        case 'Space':
+   478→          e.preventDefault()
+   479→          togglePlay()
+   480→          break
+   481→        case 'ArrowLeft': {
+   482→          e.preventDefault()
+   483→          stepSeek(-(useAppStore.getState().settings?.doubleTapSeek ?? 10))
+   484→          break
+   485→        }
+   486→        case 'ArrowRight': {
+   487→          e.preventDefault()
+   488→          stepSeek(useAppStore.getState().settings?.doubleTapSeek ?? 10)
+   489→          break
+   490→        }
+   491→        case 'ArrowUp': {
+   492→          e.preventDefault()
+   493→          applyVolume(Math.min(1, Math.round((v.volume + 0.1) * 100) / 100))
+   494→          break
+   495→        }
+   496→        case 'ArrowDown': {
+   497→          e.preventDefault()
+   498→          applyVolume(Math.max(0, Math.round((v.volume - 0.1) * 100) / 100))
+   499→          break
+   500→        }
+   501→      }
+   502→    }
+   503→    window.addEventListener('keydown', onKey)
+   504→    return () => window.removeEventListener('keydown', onKey)
+   505→  }, [videoId, locked, togglePlay, stepSeek, applyVolume])
+   506→
+   507→  // ── Global timer cleanup on unmount ──────────────────────────
+   508→  useEffect(
+   509→    () => () => {
+   510→      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+   511→      if (osdTimerRef.current) window.clearTimeout(osdTimerRef.current)
+   512→    },
+   513→    []
+   514→  )
+   515→
+   516→  const cues = useMemo(() => {
+   517→    if (!video) return []
+   518→    const d = duration > 0 ? duration : video.duration
+   519→    return generateDemoCues(d, video.title)
+   520→  }, [video, duration])
+   521→
+   522→  if (!video) return null
+   523→
+   524→  // ── Everything below runs only with an active video ──────────
+   525→  const dur = duration > 0 ? duration : video.duration
+   526→
+   527→  const saveProgressNow = () => {
+   528→    const v = videoRef.current
+   529→    if (!v) return
+   530→    const d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : video.duration
+   531→    const pos = Math.floor(v.currentTime || 0)
+   532→    positionRef.current = { id: video.id, time: pos, dur: d }
+   533→    void apiPost('/api/history', {
+   534→      videoId: video.id,
+   535→      position: pos,
+   536→      duration: Math.floor(d || 0),
+   537→    }).catch(() => {})
+   538→  }
+   539→
+   540→  const updateBuffered = () => {
+   541→    const v = videoRef.current
+   542→    if (!v) return
+   543→    try {
+   544→      if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1))
+   545→    } catch {
+   546→      /* noop */
+   547→    }
+   548→  }
+   549→
+   550→  const handleClose = () => {
+   551→    saveProgressNow()
+   552→    useAppStore.getState().bumpData()
+   553→    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+   554→    if (document.pictureInPictureElement) void document.exitPictureInPicture().catch(() => {})
+   555→    useAppStore.getState().closePlayer()
+   556→  }
+   557→
+   558→  const afterPostRoll = () => {
+   559→    const st = useAppStore.getState()
+   560→    if (st.settings?.autoPlayNext && st.playerQueue.length > 1) st.playNext()
+   561→    else handleClose()
+   562→  }
+   563→
+   564→  const handleAdComplete = (skipped: boolean) => {
+   565→    useAppStore.getState().setLastAdAt(Date.now())
+   566→    const phase = activeAd?.phase
+   567→    setActiveAd(null)
+   568→    if (phase === 'post') afterPostRoll()
+   569→    // 'pre' / 'mid': the play-gate effect resumes the main video
+   570→  }
+   571→
+   572→  const handleLoadedMetadata = () => {
+   573→    const v = videoRef.current
+   574→    if (!v) return
+   575→    const metaDur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : video.duration
+   576→    setDuration(metaDur)
+   577→    setNatural({ w: v.videoWidth, h: v.videoHeight })
+   578→    if (resumeAppliedRef.current !== video.id) {
+   579→      resumeAppliedRef.current = video.id
+   580→      const s = useAppStore.getState().settings
+   581→      if (
+   582→        s &&
+   583→        s.resumePlayback &&
+   584→        video.history &&
+   585→        video.history.watchedPct < 95 &&
+   586→        video.history.position > 3
+   587→      ) {
+   588→        const target = Math.min(video.history.position, Math.max(0, metaDur - 2))
+   589→        if (target > 0) {
+   590→          v.currentTime = target
+   591→          setCurrentTime(target)
+   592→          toast(`Resumed at ${formatDuration(target)}`)
+   593→        }
+   594→      } else if (!s || !s.resumePlayback) {
+   595→        v.currentTime = 0
+   596→      }
+   597→      const spd = s?.defaultSpeed ?? 1
+   598→      if (!speedTouchedRef.current) {
+   599→        v.playbackRate = spd
+   600→        setSpeed(spd)
+   601→      }
+   602→    }
+   603→  }
+   604→
+   605→  const handleTimeUpdate = () => {
+   606→    const v = videoRef.current
+   607→    if (!v) return
+   608→    const t = v.currentTime
+   609→    const d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : video.duration
+   610→    setCurrentTime(t)
+   611→    positionRef.current = { id: video.id, time: t, dur: d }
+   612→    updateBuffered()
+   613→
+   614→    // throttled progress save every 5s
+   615→    const now = Date.now()
+   616→    if (now - lastSaveRef.current >= 5000) {
+   617→      lastSaveRef.current = now
+   618→      saveProgressNow()
+   619→    }
+   620→
+   621→    // ── MID_ROLL machine ──
+   622→    if (!activeAd && !startupGate && mainStarted && !midRollFetchingRef.current) {
+   623→      const st = useAppStore.getState()
+   624→      const s = st.settings
+   625→      if (s && s.adsEnabled && d >= (s.minMidRollDurationSec || 300)) {
+   626→        if (st.midRollsShown < s.maxMidRolls) {
+   627→          const last = st.lastAdAt
+   628→          if (last === null || now - last > 90_000) {
+   629→            const thresholds = MID_ROLL_THRESHOLDS[s.maxMidRolls] ?? []
+   630→            const th = thresholds[st.midRollsShown]
+   631→            if (th !== undefined && t >= th * d) {
+   632→              midRollFetchingRef.current = true
+   633→              saveProgressNow()
+   634→              requestAd({
+   635→                placement: 'MID_ROLL',
+   636→                videoId: video.id,
+   637→                videoDuration: Math.floor(d),
+   638→              })
+   639→                .then((a) => {
+   640→                  midRollFetchingRef.current = false
+   641→                  if (a) {
+   642→                    st.setLastAdAt(Date.now())
+   643→                    st.incMidRolls()
+   644→                    setActiveAd({ ad: a, phase: 'mid' })
+   645→                  }
+   646→                })
+   647→                .catch(() => {
+   648→                  midRollFetchingRef.current = false
+   649→                })
+   650→            }
+   651→          }
+   652→        }
+   653→      }
+   654→    }
+   655→  }
+   656→
+   657→  const handlePlayEvent = () => {
+   658→    setPlaying(true)
+   659→    setWaiting(false)
+   660→    if (!startupGate && !adRef.current) setMainStarted(true)
+   661→  }
+   662→
+   663→  const handlePauseEvent = () => {
+   664→    setPlaying(false)
+   665→    saveProgressNow()
+   666→  }
+   667→
+   668→  const handleEnded = () => {
+   669→    if (endedRef.current) return
+   670→    endedRef.current = true
+   671→    setPlaying(false)
+   672→    saveProgressNow()
+   673→    const s = useAppStore.getState().settings
+   674→    if (s && s.adsEnabled) {
+   675→      requestAd({ placement: 'POST_ROLL', videoId: video.id })
+   676→        .then((a) => {
+   677→          if (a) setActiveAd({ ad: a, phase: 'post' })
+   678→          else afterPostRoll()
+   679→        })
+   680→        .catch(() => afterPostRoll())
+   681→    } else {
+   682→      afterPostRoll()
+   683→    }
+   684→  }
+   685→
+   686→  const handleVideoError = () => {
+   687→    const v = videoRef.current
+   688→    const code = v?.error?.code
+   689→    const messages: Record<number, string> = {
+   690→      1: 'Loading aborted',
+   691→      2: 'Network error while fetching the video',
+   692→      3: 'Decode error — the codec may be unsupported',
+   693→      4: 'Source format not supported or file corrupted',
+   694→    }
+   695→    setError(
+   696→      code !== undefined
+   697→        ? `${messages[code] ?? 'Playback error'} (code ${code})`
+   698→        : 'Unknown playback error'
+   699→    )
+   700→    setWaiting(false)
+   701→  }
+   702→
+   703→  const tryAgain = () => {
+   704→    const v = videoRef.current
+   705→    if (!v) return
+   706→    setError(null)
+   707→    setErrorDetails(false)
+   708→    endedRef.current = false
+   709→    setWaiting(true)
+   710→    v.load()
+   711→    if (!userPausedRef.current) void v.play().catch(() => {})
+   712→  }
+   713→
+   714→  const toggleMute = () => {
+   715→    const v = videoRef.current
+   716→    if (!v) return
+   717→    const next = !v.muted
+   718→    v.muted = next
+   719→    setMuted(next)
+   720→  }
+   721→
+   722→  const handleSpeed = (s: number) => {
+   723→    const v = videoRef.current
+   724→    if (v) v.playbackRate = s
+   725→    speedTouchedRef.current = true
+   726→    setSpeed(s)
+   727→    toast(`Speed ${s}×`)
+   728→  }
+   729→
+   730→  const handleAspect = (a: AspectMode) => {
+   731→    setAspect(a)
+   732→    toast(`Aspect: ${a}`)
+   733→  }
+   734→
+   735→  const handleRotate = () => {
+   736→    const next = (rotation + 90) % 360
+   737→    setRotation(next)
+   738→    toast(`Rotation ${next}° (${next % 180 === 0 ? 'portrait' : 'landscape'})`)
+   739→  }
+   740→
+   741→  const handleAudioTrack = (t: string) => {
+   742→    setAudioTrack(t)
+   743→    toast(`Audio track: ${t} (demo)`)
+   744→  }
+   745→
+   746→  const toggleFullscreen = () => {
+   747→    const el = containerRef.current
+   748→    if (!el) return
+   749→    if (document.fullscreenElement) {
+   750→      void document.exitFullscreen().catch(() => {})
+   751→    } else {
+   752→      void el.requestFullscreen().catch(() => {
+   753→        toast('Fullscreen not available on this device')
+   754→      })
+   755→    }
+   756→  }
+   757→
+   758→  const handlePip = () => {
+   759→    const v = videoRef.current
+   760→    if (!v) return
+   761→    if (document.pictureInPictureElement) {
+   762→      void document.exitPictureInPicture().catch(() => {})
+   763→    } else {
+   764→      void v.requestPictureInPicture().catch(() => toast('PiP not supported on this device'))
+   765→    }
+   766→  }
+   767→
+   768→  const videoStyle: CSSProperties = {
+   769→    objectFit: aspect === 'Crop' ? 'cover' : aspect === 'Stretch' ? 'fill' : 'contain',
+   770→    transform: `rotate(${rotation}deg)${aspect === 'Zoom' ? ' scale(1.28)' : ''}`,
+   771→    filter: `brightness(${brightness})`,
+   772→    transition: 'transform 0.25s ease, filter 0.15s ease',
+   773→  }
+   774→  const useNaturalSize = aspect === '100%' && natural.w > 0 && natural.h > 0
+   775→
+   776→  return (
+   777→    <div
+   778→      ref={containerRef}
+   779→      role="dialog"
+   780→      aria-label={`Video player — ${video.title}`}
+   781→      className={`fixed inset-0 z-50 select-none overflow-hidden ${
+   782→        settings?.playerTheme === 'DIM' ? '' : 'bg-black'
+   783→      }`}
+   784→      style={settings?.playerTheme === 'DIM' ? { backgroundColor: '#0a0a14' } : undefined}
+   785→      onPointerMove={() => {
+   786→        if (controlsVisible && playing && !activeAd && !locked) armHideTimer()
+   787→      }}
+   788→    >
+   789→      {/* Main video */}
+   790→      <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black">
+   791→        <video
+   792→          key={video.id}
+   793→          ref={videoRef}
+   794→          src={video.srcUrl}
+   795→          playsInline
+   796→          preload="auto"
+   797→          className={useNaturalSize ? '' : 'h-full w-full'}
+   798→          style={
+   799→            useNaturalSize
+   800→              ? {
+   801→                  ...videoStyle,
+   802→                  width: natural.w,
+   803→                  height: natural.h,
+   804→                  maxWidth: '100%',
+   805→                  maxHeight: '100%',
+   806→                }
+   807→              : videoStyle
+   808→          }
+   809→          onLoadedMetadata={handleLoadedMetadata}
+   810→          onLoadStart={() => setWaiting(true)}
+   811→          onTimeUpdate={handleTimeUpdate}
+   812→          onProgress={updateBuffered}
+   813→          onPlay={handlePlayEvent}
+   814→          onPause={handlePauseEvent}
+   815→          onEnded={handleEnded}
+   816→          onWaiting={() => setWaiting(true)}
+   817→          onPlaying={() => setWaiting(false)}
+   818→          onCanPlay={() => setWaiting(false)}
+   819→          onError={handleVideoError}
+   820→        />
+   821→      </div>
+   822→
+   823→      {/* Gestures */}
+   824→      <GestureLayer
+   825→        disabled={Boolean(activeAd) || Boolean(error)}
+   826→        locked={locked}
+   827→        brightness={brightness}
+   828→        volume={volume}
+   829→        seekAmount={settings?.doubleTapSeek ?? 10}
+   830→        currentTime={currentTime}
+   831→        duration={dur}
+   832→        onBrightnessChange={handleBrightness}
+   833→        onVolumeChange={applyVolume}
+   834→        onSeekPreview={handleSeekPreview}
+   835→        onSeekCommit={handleSeekCommit}
+   836→        onToggleControls={toggleControls}
+   837→      />
+   838→
+   839→      {/* Subtitles */}
+   840→      {subtitlesOn && !activeAd && !error && (
+   841→        <SubtitleRenderer
+   842→          cues={cues}
+   843→          currentTime={currentTime}
+   844→          delay={subDelay}
+   845→          size={subSize}
+   846→          positionPct={subPositionPct}
+   847→          bgOpacity={subBgOpacity}
+   848→        />
+   849→      )}
+   850→
+   851→      {/* Buffering spinner */}
+   852→      <AnimatePresence>
+   853→        {waiting && !error && !activeAd && (
+   854→          <motion.div
+   855→            initial={{ opacity: 0 }}
+   856→            animate={{ opacity: 1 }}
+   857→            exit={{ opacity: 0 }}
+   858→            transition={{ duration: 0.15 }}
+   859→            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+   860→          >
+   861→            <Loader2 className="h-12 w-12 animate-spin text-white/85" />
+   862→          </motion.div>
+   863→        )}
+   864→      </AnimatePresence>
+   865→
+   866→      {/* OSD */}
+   867→      <AnimatePresence>
+   868→        {osd && (
+   869→          <motion.div
+   870→            key={osd.key}
+   871→            initial={{ opacity: 0, scale: 0.94 }}
+   872→            animate={{ opacity: 1, scale: 1 }}
+   873→            exit={{ opacity: 0 }}
+   874→            transition={{ duration: 0.18 }}
+   875→            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+   876→          >
+   877→            <div className="flex flex-col items-center gap-3 rounded-2xl bg-black/60 px-7 py-5 text-white backdrop-blur">
+   878→              {osd.kind === 'brightness' && <Sun className="h-9 w-9" />}
+   879→              {osd.kind === 'volume' && <Volume2 className="h-9 w-9" />}
+   880→              {osd.kind === 'seek' &&
+   881→                (osd.icon === 'fwd' ? (
+   882→                  <FastForward className="h-9 w-9" />
+   883→                ) : (
+   884→                  <Rewind className="h-9 w-9" />
+   885→                ))}
+   886→              {osd.kind === 'seek' ? (
+   887→                <div className="text-base font-semibold tabular-nums">{osd.text}</div>
+   888→              ) : (
+   889→                <>
+   890→                  <div className="h-1.5 w-40 overflow-hidden rounded-full bg-white/20">
+   891→                    <div
+   892→                      className="h-full rounded-full bg-white"
+   893→                      style={{ width: `${Math.round(osd.value * 100)}%` }}
+   894→                    />
+   895→                  </div>
+   896→                  <div className="text-xs tabular-nums text-white/80">
+   897→                    {Math.round(osd.value * 100)}%
+   898→                  </div>
+   899→                </>
+   900→              )}
+   901→            </div>
+   902→          </motion.div>
+   903→        )}
+   904→      </AnimatePresence>
+   905→
+   906→      {/* Top gradient bar */}
+   907→      <AnimatePresence>
+   908→        {controlsVisible && !activeAd && !locked && !error && (
+   909→          <motion.div
+   910→            key="topbar"
+   911→            initial={{ opacity: 0, y: -12 }}
+   912→            animate={{ opacity: 1, y: 0 }}
+   913→            exit={{ opacity: 0, y: -12 }}
+   914→            transition={{ duration: 0.2 }}
+   915→            className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent px-3 pb-12 pt-3 sm:px-5"
+   916→          >
+   917→            <div className="flex min-w-0 items-center gap-2">
+   918→              <Button
+   919→                variant="ghost"
+   920→                size="icon"
+   921→                className="pointer-events-auto h-11 w-11 shrink-0 rounded-full text-white hover:bg-white/15 hover:text-white"
+   922→                onClick={handleClose}
+   923→                aria-label="Close player"
+   924→              >
+   925→                <ChevronDown className="h-6 w-6" />
+   926→              </Button>
+   927→              <div className="min-w-0">
+   928→                <div className="truncate text-sm font-medium text-white">{video.title}</div>
+   929→                <div className="truncate text-xs text-white/55">
+   930→                  {video.folder} · {video.resolutionLabel}
+   931→                </div>
+   932→              </div>
+   933→            </div>
+   934→            {pipSupported && (
+   935→              <Button
+   936→                variant="ghost"
+   937→                size="icon"
+   938→                className={`pointer-events-auto h-11 w-11 shrink-0 rounded-full text-white hover:bg-white/15 hover:text-white ${
+   939→                  pipActive ? 'text-(--vx-accent)' : ''
+   940→                }`}
+   941→                onClick={handlePip}
+   942→                aria-label="Picture in picture"
+   943→              >
+   944→                <PictureInPicture2 className="h-5 w-5" />
+   945→              </Button>
+   946→            )}
+   947→          </motion.div>
+   948→        )}
+   949→      </AnimatePresence>
+   950→
+   951→      {/* Controls */}
+   952→      <AnimatePresence>
+   953→        {controlsVisible && !activeAd && !locked && !error && (
+   954→          <PlayerControls
+   955→            key="controls"
+   956→            playing={playing}
+   957→            currentTime={currentTime}
+   958→            duration={dur}
+   959→            buffered={buffered}
+   960→            volume={volume}
+   961→            muted={muted}
+   962→            speed={speed}
+   963→            aspect={aspect}
+   964→            fullscreen={isFullscreen}
+   965→            queueLength={queueLength}
+   966→            pipActive={pipActive}
+   967→            subtitlesOn={subtitlesOn}
+   968→            subDelay={subDelay}
+   969→            subSize={subSize}
+   970→            subBgOpacity={subBgOpacity}
+   971→            audioTrack={audioTrack}
+   972→            defaultSpeed={settings?.defaultSpeed ?? 1}
+   973→            onTogglePlay={togglePlay}
+   974→            onSeek={(t) => handleSeekCommit(t, t - currentTime)}
+   975→            onStep={stepSeek}
+   976→            onPrev={() => useAppStore.getState().playPrev()}
+   977→            onNext={() => useAppStore.getState().playNext()}
+   978→            onToggleMute={toggleMute}
+   979→            onSpeed={handleSpeed}
+   980→            onAspect={handleAspect}
+   981→            onRotate={handleRotate}
+   982→            onToggleFullscreen={toggleFullscreen}
+   983→            onPip={handlePip}
+   984→            onLock={() => {
+   985→              setLocked(true)
+   986→              toast('Screen locked — hold the unlock button to release')
+   987→            }}
+   988→            onSubtitlesToggle={setSubtitlesOn}
+   989→            onSubDelay={setSubDelay}
+   990→            onSubSize={setSubSize}
+   991→            onSubBg={setSubBgOpacity}
+   992→            onAudioTrack={handleAudioTrack}
+   993→            onInteract={() => {
+   994→              if (playing) armHideTimer()
+   995→            }}
+   996→            onHoldVisibility={holdVisibility}
+   997→          />
+   998→        )}
+   999→      </AnimatePresence>
+  1000→
+  1001→      {/* Lock mode */}
+  1002→      {locked && (
+  1003→        <LockOverlay
+  1004→          onUnlock={() => {
+  1005→            setLocked(false)
+  1006→            toast('Unlocked')
+  1007→          }}
+  1008→        />
+  1009→      )}
+  1010→
+  1011→      {/* Non-blocking overlay ad */}
+  1012→      <AnimatePresence>
+  1013→        {overlayAd && !activeAd && (
+  1014→          <OverlayAd
+  1015→            key={overlayAd.creativeId}
+  1016→            ad={overlayAd}
+  1017→            videoId={video.id}
+  1018→            onClose={() => setOverlayAd(null)}
+  1019→          />
+  1020→        )}
+  1021→      </AnimatePresence>
+  1022→
+  1023→      {/* Error panel */}
+  1024→      {error && !activeAd && (
+  1025→        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-6">
+  1026→          <div className="vx-card w-full max-w-sm rounded-2xl p-6 text-center">
+  1027→            <TriangleAlert className="mx-auto h-10 w-10 text-rose-400" />
+  1028→            <h2 className="mt-3 text-base font-semibold text-white">Unable to play this video.</h2>
+  1029→            <ul className="mx-auto mt-3 space-y-1 text-left text-xs text-white/55">
+  1030→              <li>• Unsupported codec</li>
+  1031→              <li>• Corrupted file</li>
+  1032→              <li>• Storage permission unavailable</li>
+  1033→            </ul>
+  1034→            {errorDetails && (
+  1035→              <div className="mt-3 break-words rounded-lg bg-white/5 p-2 text-left text-[11px] text-white/45">
+  1036→                {error}
+  1037→              </div>
+  1038→            )}
+  1039→            <div className="mt-5 flex items-center justify-center gap-2">
+  1040→              <Button
+  1041→                onClick={tryAgain}
+  1042→                className="vx-btn-accent h-10 rounded-full border-0 px-5 text-sm font-semibold text-white"
+  1043→              >
+  1044→                TRY AGAIN
+  1045→              </Button>
+  1046→              <Button
+  1047→                variant="ghost"
+  1048→                onClick={() => setErrorDetails((d) => !d)}
+  1049→                className="h-10 rounded-full px-4 text-sm text-white/70 hover:text-white"
+  1050→              >
+  1051→                DETAILS
+  1052→              </Button>
+  1053→            </div>
+  1054→          </div>
+  1055→        </div>
+  1056→      )}
+  1057→
+  1058→      {/* Full-screen ad (pre / mid / post roll) */}
+  1059→      <AnimatePresence>
+  1060→        {activeAd && (
+  1061→          <AdOverlay
+  1062→            key={`${activeAd.ad.creativeId}-${activeAd.phase}`}
+  1063→            ad={activeAd.ad}
+  1064→            phase={activeAd.phase}
+  1065→            videoId={video.id}
+  1066→            onComplete={handleAdComplete}
+  1067→          />
+  1068→        )}
+  1069→      </AnimatePresence>
+  1070→    </div>
+  1071→  )
+  1072→}
+  1073→
+  1074→

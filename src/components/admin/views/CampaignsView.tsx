@@ -3,9 +3,10 @@
 // Campaigns — full CRUD table with dialog form (0..3 creatives per campaign),
 // pause/resume, delete confirmation. VIEWER gets a read-only table.
 
-import { useCallback, useEffect, useState } from 'react'
-import { Megaphone, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Megaphone, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAppStore } from '@/lib/store'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,6 +63,7 @@ type CreativeForm = {
   headline: string
   bodyText: string
   ctaText: string
+  ctaUrl: string
 }
 
 type CampaignForm = {
@@ -86,6 +88,7 @@ const EMPTY_CREATIVE: CreativeForm = {
   headline: '',
   bodyText: '',
   ctaText: '',
+  ctaUrl: '',
 }
 
 function isoDay(offsetDays: number): string {
@@ -128,6 +131,7 @@ function formFromCampaign(c: CampaignDTO): CampaignForm {
       headline: cr.headline ?? '',
       bodyText: cr.bodyText ?? '',
       ctaText: cr.ctaText ?? '',
+      ctaUrl: cr.ctaUrl ?? '',
     })),
   }
 }
@@ -145,6 +149,8 @@ export default function CampaignsView() {
   const [form, setForm] = useState<CampaignForm>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [toDelete, setToDelete] = useState<CampaignDTO | null>(null)
+  const [mediaUpload, setMediaUpload] = useState<{ idx: number; pct: number } | null>(null)
+  const uploadInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -189,6 +195,55 @@ export default function CampaignsView() {
     }))
   }
 
+  /** Upload a creative asset (video/image from device storage) with progress. */
+  function uploadCreativeMedia(idx: number, file: File) {
+    const token = useAppStore.getState().adminToken
+    const xhr = new XMLHttpRequest()
+    setMediaUpload({ idx, pct: 0 })
+    xhr.open('POST', `/api/admin/creatives/upload?name=${encodeURIComponent(file.name)}`)
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setMediaUpload({ idx, pct: Math.round((e.loaded / e.total) * 100) })
+    }
+    xhr.onload = () => {
+      setMediaUpload(null)
+      try {
+        const body = JSON.parse(xhr.responseText) as {
+          url?: string
+          kind?: string
+          duration?: number | null
+          error?: string
+        }
+        if (xhr.status >= 200 && xhr.status < 300 && body.url) {
+          const patch: Partial<CreativeForm> = { mediaUrl: body.url }
+          if (body.kind === 'video' && typeof body.duration === 'number' && body.duration > 0) {
+            patch.duration = body.duration
+          }
+          const autoName = file.name.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim()
+          setForm((f) => ({
+            ...f,
+            creatives: f.creatives.map((c, i) =>
+              i === idx
+                ? { ...c, ...patch, name: c.name.trim() ? c.name : autoName || c.name }
+                : c,
+            ),
+          }))
+          toast.success(`Media uploaded${body.kind === 'video' && body.duration ? ` · ${body.duration}s detected` : ''}`)
+        } else {
+          toast.error(body.error || 'Upload failed')
+        }
+      } catch {
+        toast.error('Upload failed')
+      }
+    }
+    xhr.onerror = () => {
+      setMediaUpload(null)
+      toast.error('Network error during upload')
+    }
+    xhr.send(file)
+  }
+
   async function save() {
     if (!form.name.trim() || !form.advertiser.trim()) {
       toast.error('Campaign name and advertiser are required.')
@@ -222,6 +277,7 @@ export default function CampaignsView() {
         headline: c.headline.trim() || null,
         bodyText: c.bodyText.trim() || null,
         ctaText: c.ctaText.trim() || null,
+        ctaUrl: c.ctaUrl.trim() || null,
       })),
     }
     try {
@@ -483,8 +539,72 @@ export default function CampaignsView() {
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-white/55">Media URL</Label>
-                    <Input value={cr.mediaUrl} onChange={(e) => updateCreative(idx, { mediaUrl: e.target.value })} placeholder="/ads/teaser.mp4" className="h-8 border-white/10 bg-white/[0.04] text-sm text-white" />
+                    <Label className="text-xs text-white/55">Media — URL or upload</Label>
+                    <div className="flex gap-1.5">
+                      <Input
+                        value={cr.mediaUrl}
+                        onChange={(e) => updateCreative(idx, { mediaUrl: e.target.value })}
+                        placeholder="https://cdn.example.com/ad.mp4"
+                        className="h-8 min-w-0 border-white/10 bg-white/[0.04] text-sm text-white"
+                      />
+                      {cr.type !== 'TEXT' && (
+                        <>
+                          <input
+                            ref={(el) => {
+                              uploadInputRefs.current[idx] = el
+                            }}
+                            type="file"
+                            accept={cr.type === 'VIDEO' ? 'video/*' : 'image/*'}
+                            className="sr-only"
+                            data-testid={`creative-upload-${idx}`}
+                            tabIndex={-1}
+                            title="Upload creative media from device"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              e.target.value = ''
+                              if (file) uploadCreativeMedia(idx, file)
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={mediaUpload?.idx === idx}
+                            onClick={() => uploadInputRefs.current[idx]?.click()}
+                            className="h-8 shrink-0 border-white/15 bg-white/[0.04] px-2.5 text-xs text-white/80 hover:bg-white/10 hover:text-white"
+                          >
+                            {mediaUpload?.idx === idx ? (
+                              `${mediaUpload.pct}%`
+                            ) : (
+                              <>
+                                <Upload className="mr-1 h-3.5 w-3.5" /> Upload
+                              </>
+                            )}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    {mediaUpload?.idx === idx && <Progress value={mediaUpload.pct} className="h-1" />}
+                    {cr.mediaUrl && cr.type !== 'TEXT' && (
+                      <div className="flex items-center gap-2 pt-0.5">
+                        {cr.type === 'VIDEO' ? (
+                          <video
+                            src={cr.mediaUrl}
+                            muted
+                            preload="metadata"
+                            className="h-14 w-24 rounded-md border border-white/10 bg-black object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={cr.mediaUrl}
+                            alt="Creative preview"
+                            className="h-14 w-24 rounded-md border border-white/10 bg-black object-cover"
+                          />
+                        )}
+                        <span className="text-[10px] text-white/35">
+                          {cr.type === 'VIDEO' ? 'Video preview' : 'Image preview'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
@@ -516,9 +636,15 @@ export default function CampaignsView() {
                     <Label className="text-xs text-white/55">Body text</Label>
                     <Input value={cr.bodyText} onChange={(e) => updateCreative(idx, { bodyText: e.target.value })} placeholder="Up to 50% off everything" className="h-8 border-white/10 bg-white/[0.04] text-sm text-white" />
                   </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label className="text-xs text-white/55">CTA text</Label>
-                    <Input value={cr.ctaText} onChange={(e) => updateCreative(idx, { ctaText: e.target.value })} placeholder="Shop now" className="h-8 border-white/10 bg-white/[0.04] text-sm text-white" />
+                  <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-white/55">CTA text</Label>
+                      <Input value={cr.ctaText} onChange={(e) => updateCreative(idx, { ctaText: e.target.value })} placeholder="Shop now" className="h-8 border-white/10 bg-white/[0.04] text-sm text-white" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-white/55">CTA URL</Label>
+                      <Input value={cr.ctaUrl} onChange={(e) => updateCreative(idx, { ctaUrl: e.target.value })} placeholder="https://example.com/offer" className="h-8 border-white/10 bg-white/[0.04] text-sm text-white" />
+                    </div>
                   </div>
                 </div>
               </div>

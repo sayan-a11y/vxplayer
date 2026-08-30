@@ -202,3 +202,38 @@ Work Log:
 
 Stage Summary:
 - "Scan device storage" is real now: on Android/Chrome the file input accept=video/* multiple opens the phone's video picker; selected files stream to the server, get probed by ffprobe, thumbnailed by ffmpeg, and appear in Home/Videos/Folders with correct metadata and play in the VX player. Admin panel opens and fully works on mobile (drawer nav); desktop unchanged. /api/scan route left in place (no longer referenced by UI).
+
+---
+Task ID: 7
+Agent: main (Z.ai Code)
+Task: Video quality system — real 140p → 2K renditions with in-player quality selector.
+
+Work Log:
+- Prisma: new QualityVariant model (videoId, label, width/height, bitrateKbps, filePath, fileSizeMB, status READY|PROCESSING|FAILED, isSource; unique videoId+label) + Video.qualities relation; db:push OK.
+- src/lib/qualities.ts: tier ladder 140p/240p/360p/480p/720p HD/1080p Full HD/1440p 2K/2160p 4K + qualityDisplayLabel, tierLabelForHeight, isBrowserFriendlySource (hevc/avi etc. → full transcode ladder), resolveAutoVariant (highest tier ≤ viewport, fallback smallest).
+- src/lib/transcode.ts (server-only): queueTranscode(videoId) fire-and-forget after upload; global one-at-a-time queue anchored on globalThis (Turbopack-safe); per tier: ffmpeg scale=-2:H + libx264 veryfast CRF23 maxrate cap + aac 96k + faststart into public/media/quality/<id>/<label>.mp4; never upscales (tiers strictly below source height); non-browser-friendly sources get a top-tier transcode too; READY/FAILED statuses tracked per row.
+- Upload route queues transcode post-create; /api/videos + /api/videos/[id] include qualities (desc) via new shared serialize.ts (also fixes route export hygiene); DELETE /api/videos/[id] added (row cascade + source/thumbnail/quality-dir file cleanup).
+- PlayerScreen: variants state + fetch/poll (4s while PROCESSING), auto quality by viewport height (resize-aware), source switching that preserves position+play state (pendingSeek applied on loadedmetadata; position from positionRef, wasPlaying via playingRef), preference persisted in localStorage vx_quality, effectivePref fallback when stored label unavailable, top bar shows live active quality label.
+- PlayerControls: new Quality menu (Settings2 icon + current label): Auto row (shows what auto would pick), all variants desc with size/Original/Processing… states, disabled until READY, footer note; secondary control row now horizontally scrollable (shrink-0) for narrow phones.
+- E2E (agent-browser + curl): 2K fixture (2560x1440) upload → 7/7 variants READY in ~60s (140p…1440p Original); auto picked 720p on 1280x800; switch 720p→140p preserved position exactly (0.50s, paused kept); playing→1440p switch continued at t=2.02→4.67 with videoHeight=1440; preference persisted across reload (140p restored); user deleted the test fixture themselves via the new UI delete (log: DELETE 200, all files incl. quality dir removed).
+
+Stage Summary:
+- Every imported video now gets a real quality ladder (140p→min(source,2K/4K), never upscaled) generated in the background; the player has a YouTube-style quality menu with Auto + per-file sizes; switching is seamless (position + play state preserved) and the preference persists across videos/sessions. Non-browser-friendly sources (hevc/avi/wmv) become fully playable via the transcode ladder.
+
+---
+Task ID: 8
+Agent: main (Z.ai Code)
+Task: Ads with real video/image creatives (URL or device-storage upload, real-time serving) + user-facing video delete.
+
+Work Log:
+- NEW POST /api/admin/creatives/upload?name= (auth requireAuth + RBAC SUPER_ADMIN|ADMIN|AD_MANAGER): raw-body stream → public/ads/<uuid>.<ext>; video (mp4/webm/mkv/mov/m4v/3gp, 500MB) + image (jpg/jpeg/png/webp/gif, 25MB); ffprobe validates BOTH kinds and returns duration (videos, auto-fills the form) / dimensions; corrupted files rejected 415 + temp cleaned.
+- Eligibility: PRE/MID/POST rolls now also serve IMAGE creatives as timed display spots (was VIDEO-only).
+- AdOverlay: renders IMAGE creatives full-screen object-contain with wall-clock ticker + countdown + skip + CTAs; START fires on mount for image ads; BannerAd also renders BANNER-type images (quality=90); OverlayAd renders IMAGE/OVERLAY/BANNER images larger (max-h-36/52) with CTA + close.
+- CampaignsView creative form: Media field = URL input + Upload button (per-creative sr-only file input, accept video/*|image/*) with XHR progress % + auto-fill (url, duration from probe, name from filename) + live video/image preview; added the missing CTA URL field (next to CTA text) so ads can open real links; payload sends ctaUrl.
+- CreativesView: VIDEO creatives show real <video> thumbnails instead of broken <img>.
+- VideoCard: "Delete video" menu item (red) + AlertDialog confirm → DELETE /api/videos/[id] → closes player if it was playing that video, bumpData, toast. E2E-confirmed by the user themselves deleting the Task-7 fixture through this UI (row+source+thumb+variants all gone, single DELETE in dev.log).
+- E2E (agent-browser, desktop): admin login → created "VX Real Ads Demo" (ACTIVE, PRE_ROLL+OVERLAY+BANNER) with VIDEO creative uploaded from storage (duration auto-detected 8s) + IMAGE creative uploaded (1920x1080 PNG) + CTA text/URL on both; serve API returned uploaded video for PRE_ROLL and image for OVERLAY/BANNER in real time; Home banner rendered the uploaded image crisp (874x54 strip from 1920x1080); pre-roll played the UPLOADED VIDEO ad (auto-detected 8.0s) then resumed main; image pre-roll rendered full-screen with Ad·14s countdown + skip; overlay ad captured over playback (image + headline + "See plans" CTA + close). Frequency caps verified (session hit cap=2 → null for that session, fresh session served).
+- Cleanup: test campaign deleted, /ads files removed, 25 test AdEvents purged, autoPlayNext restored, user's history position restored. Lint 0 errors; tsc clean; dev.log clean.
+
+Stage Summary:
+- Ads are fully self-serve now: video AND image creatives can be added by URL or uploaded from device storage (with progress + probe-derived metadata), shown across all placements in high quality, and CTAs open real links — all served in real time from the campaigns manager. Users can delete any library video (with confirmation) and everything (files, variants, history, playlist entries) is cleaned up.

@@ -59,7 +59,7 @@ export function BannerAd() {
   return (
     <div className="relative z-10 mx-4 mt-4 md:mx-6" role="complementary" aria-label="Sponsored">
       <div className="vx-card flex h-14 items-center gap-3 overflow-hidden rounded-xl pl-3 pr-10">
-        {ad.type === 'IMAGE' && ad.mediaUrl ? (
+        {(ad.type === 'IMAGE' || ad.type === 'BANNER') && ad.mediaUrl ? (
           <button
             type="button"
             onClick={handleCta}
@@ -70,6 +70,7 @@ export function BannerAd() {
               src={ad.mediaUrl}
               alt={ad.headline ?? 'Advertisement'}
               fill
+              quality={90}
               sizes="(max-width: 768px) 100vw, 700px"
               className="object-cover"
             />

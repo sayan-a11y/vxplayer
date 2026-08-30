@@ -29,6 +29,27 @@ model Video {
   favorite        Boolean        @default(false)
   history         HistoryEntry?
   playlistItems   PlaylistItem[]
+  qualities       QualityVariant[]
+}
+
+/// One selectable rendition of a video (source file or ffmpeg-transcoded tier).
+/// Labels follow vertical resolution: 140p, 240p, 360p, 480p, 720p, 1080p, 1440p (2K), 2160p (4K).
+model QualityVariant {
+  id          String   @id @default(cuid())
+  videoId     String
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  label       String // "140p" | "720p HD" tier label | "<height>p" for non-tier originals
+  width       Int
+  height      Int
+  bitrateKbps Int @default(0) // 0 = source/original (no transcode cap)
+  filePath    String // public URL, e.g. /media/quality/<videoId>/720p.mp4
+  fileSizeMB  Int      @default(0)
+  status      String   @default("PROCESSING") // READY | PROCESSING | FAILED
+  isSource    Boolean  @default(false) // true = original uploaded file, not a transcode
+  createdAt   DateTime @default(now())
+
+  @@unique([videoId, label])
+  @@index([videoId])
 }
 
 model HistoryEntry {

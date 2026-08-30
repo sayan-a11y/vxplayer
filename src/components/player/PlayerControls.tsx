@@ -8,6 +8,7 @@ import {
   Check,
   FastForward,
   Gauge,
+  Loader2,
   Lock,
   Maximize,
   Minimize,
@@ -16,6 +17,7 @@ import {
   Play,
   Rewind,
   RotateCw,
+  Settings2,
   StepBack,
   StepForward,
   Subtitles,
@@ -27,11 +29,47 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { formatDuration } from '@/lib/format'
-import { ASPECT_MODES, SPEED_OPTIONS, type AspectMode } from '@/lib/types'
+import { qualityDisplayLabel } from '@/lib/qualities'
+import { ASPECT_MODES, SPEED_OPTIONS, type AspectMode, type QualityVariantDTO } from '@/lib/types'
 import type { SubtitleSize } from './SubtitleRenderer'
 
 const AUDIO_TRACKS = ['English 5.1 (AAC)', 'Hindi (AC3)', 'Director Commentary']
 const SUB_SIZES: SubtitleSize[] = ['S', 'M', 'L', 'XL']
+
+/** One row of the quality menu. */
+function QualityRow({
+  label,
+  hint,
+  active,
+  processing,
+  disabled,
+  onClick,
+}: {
+  label: string
+  hint?: string
+  active: boolean
+  processing?: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex min-h-[40px] w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-45 disabled:hover:bg-transparent"
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {processing && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-white/50" />}
+        <span className={active ? 'font-medium text-(--vx-accent)' : 'text-white/85'}>{label}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-white/45">
+        {hint}
+        {active && <Check className="h-4 w-4 text-(--vx-accent)" />}
+      </span>
+    </button>
+  )
+}
 
 type PlayerControlsProps = {
   playing: boolean
@@ -51,6 +89,15 @@ type PlayerControlsProps = {
   subBgOpacity: number
   audioTrack: string
   defaultSpeed: number
+  /** All quality variants of the current video (READY + PROCESSING), sorted high → low */
+  qualities: QualityVariantDTO[]
+  /** 'auto' or a variant label */
+  qualityPref: string
+  /** display label of the rendition currently playing (resolved auto incl.) */
+  activeQualityLabel: string | null
+  /** display label Auto mode would pick for this screen */
+  autoQualityLabel: string | null
+  onQuality: (label: string) => void
   onTogglePlay: () => void
   onSeek: (t: number) => void
   onStep: (d: number) => void
@@ -97,6 +144,11 @@ export default function PlayerControls(props: PlayerControlsProps) {
     subBgOpacity,
     audioTrack,
     defaultSpeed,
+    qualities,
+    qualityPref,
+    activeQualityLabel,
+    autoQualityLabel,
+    onQuality,
     onTogglePlay,
     onSeek,
     onStep,
@@ -136,7 +188,10 @@ export default function PlayerControls(props: PlayerControlsProps) {
   }
 
   const iconBtn =
-    'h-11 w-11 rounded-full text-white hover:bg-white/15 hover:text-white disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-white'
+    'h-11 w-11 shrink-0 rounded-full text-white hover:bg-white/15 hover:text-white disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-white'
+
+  const readyCount = qualities.filter((q) => q.status === 'READY').length
+  const processingCount = qualities.filter((q) => q.status === 'PROCESSING').length
 
   return (
     <motion.div
@@ -229,7 +284,7 @@ export default function PlayerControls(props: PlayerControlsProps) {
         </Button>
       </div>
 
-      {/* Secondary row */}
+      {/* Secondary row — horizontally scrollable on narrow phones */}
       <div className="mt-2 flex items-center justify-between gap-1">
         <Button
           variant="ghost"
@@ -245,7 +300,73 @@ export default function PlayerControls(props: PlayerControlsProps) {
           )}
         </Button>
 
-        <div className="flex items-center gap-0.5 sm:gap-1">
+        <div className="vx-scroll flex min-w-0 max-w-full items-center gap-0.5 overflow-x-auto sm:gap-1">
+          {/* Quality (140p → 2K/4K) */}
+          <Popover open={openPanel === 'quality'} onOpenChange={(o) => panelChange('quality', o)}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                className={`${iconBtn} w-auto gap-1.5 px-2.5 ${qualityPref !== 'auto' ? 'text-(--vx-accent)' : ''}`}
+                aria-label="Video quality"
+              >
+                <Settings2 className="h-5 w-5" />
+                <span className="text-xs font-semibold tabular-nums">
+                  {qualityPref === 'auto' ? 'Auto' : qualityPref}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="end"
+              className="vx-scroll max-h-[60vh] w-64 overflow-y-auto border-white/10 bg-zinc-900/95 text-white backdrop-blur-xl"
+            >
+              <div className="space-y-1">
+                <div className="flex items-center justify-between px-1 pb-2">
+                  <span className="text-xs font-medium text-white/50">Quality</span>
+                  {processingCount > 0 && (
+                    <span className="flex items-center gap-1 text-[10px] text-white/40">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {processingCount} processing
+                    </span>
+                  )}
+                </div>
+                <QualityRow
+                  label="Auto"
+                  hint={autoQualityLabel ?? undefined}
+                  active={qualityPref === 'auto'}
+                  onClick={() => onQuality('auto')}
+                />
+                {qualities.map((q) => (
+                  <QualityRow
+                    key={q.label}
+                    label={qualityDisplayLabel(q.label)}
+                    hint={
+                      q.status === 'READY'
+                        ? q.isSource
+                          ? 'Original'
+                          : `${q.fileSizeMB} MB`
+                        : q.status === 'PROCESSING'
+                          ? 'Processing…'
+                          : 'Unavailable'
+                    }
+                    active={qualityPref === q.label}
+                    processing={q.status === 'PROCESSING'}
+                    disabled={q.status !== 'READY'}
+                    onClick={() => onQuality(q.label)}
+                  />
+                ))}
+                {readyCount === 0 && processingCount > 0 && (
+                  <div className="px-3 pb-1 pt-1 text-[11px] leading-snug text-white/40">
+                    Playback uses the original file until variants are ready.
+                  </div>
+                )}
+                <div className="px-1 pb-1 pt-1 text-[11px] leading-snug text-white/40">
+                  Auto matches quality to your screen · up to 2K/4K for high-res imports
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           {/* Subtitles */}
           <Popover open={openPanel === 'subs'} onOpenChange={(o) => panelChange('subs', o)}>
             <PopoverTrigger asChild>

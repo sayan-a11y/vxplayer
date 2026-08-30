@@ -1,5 +1,18 @@
 // VX Player — shared contract types (single source of truth)
 
+export type QualityStatus = 'READY' | 'PROCESSING' | 'FAILED'
+
+export type QualityVariantDTO = {
+  label: string // "140p" … "1440p"; "<height>p" for non-tier originals
+  width: number
+  height: number
+  bitrateKbps: number // 0 = original source (no transcode cap)
+  filePath: string
+  fileSizeMB: number
+  status: QualityStatus
+  isSource: boolean
+}
+
 export type VideoDTO = {
   id: string
   title: string
@@ -23,6 +36,7 @@ export type VideoDTO = {
     watchedPct: number
     lastPlayedAt: string
   } | null
+  qualities?: QualityVariantDTO[]
 }
 
 export type HistoryDTO = {

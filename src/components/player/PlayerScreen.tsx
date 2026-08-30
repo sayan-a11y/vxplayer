@@ -28,7 +28,8 @@ import { requestAd, trackAdEvent } from '@/lib/ads-client'
 import { apiPost } from '@/lib/api'
 import { generateDemoCues } from '@/lib/vtt'
 import { formatDuration } from '@/lib/format'
-import type { AspectMode, ServedAd } from '@/lib/types'
+import { qualityDisplayLabel, resolveAutoVariant } from '@/lib/qualities'
+import type { AspectMode, QualityVariantDTO, ServedAd } from '@/lib/types'
 import AdOverlay, { type AdPhase } from './AdOverlay'
 import GestureLayer from './GestureLayer'
 import OverlayAd from './OverlayAd'
@@ -182,6 +183,16 @@ export default function PlayerScreen() {
   const speedTouchedRef = useRef(false)
   const subSyncedRef = useRef(false)
   const adRef = useRef<AdState | null>(null)
+
+  // quality state
+  const [variants, setVariants] = useState<QualityVariantDTO[]>([])
+  const [qualityPref, setQualityPref] = useState('auto')
+  const [viewportH, setViewportH] = useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 720,
+  )
+  const playingRef = useRef(false)
+  const pendingQualitySeekRef = useRef<{ t: number; wasPlaying: boolean } | null>(null)
+  const prevActiveSrcRef = useRef<string | null>(null)
 
   const videoId = video?.id ?? null
   const pipSupported =
@@ -379,6 +390,9 @@ export default function PlayerScreen() {
     overlayShownRef.current = false
     userPausedRef.current = false
     speedTouchedRef.current = false
+    playingRef.current = false
+    pendingQualitySeekRef.current = null
+    prevActiveSrcRef.current = null
     lastSaveRef.current = Date.now()
     setError(null)
     setErrorDetails(false)
@@ -388,6 +402,13 @@ export default function PlayerScreen() {
     setActiveAd(null)
     setOverlayAd(null)
     setMainStarted(false)
+    setVariants(useAppStore.getState().playerVideo?.qualities ?? [])
+    try {
+      const stored = window.localStorage.getItem('vx_quality')
+      setQualityPref(stored ? stored : 'auto')
+    } catch {
+      setQualityPref('auto')
+    }
     store.resetMidRolls()
 
     // PRE_ROLL on every video open
@@ -504,6 +525,110 @@ export default function PlayerScreen() {
     return () => window.removeEventListener('keydown', onKey)
   }, [videoId, locked, togglePlay, stepSeek, applyVolume])
 
+  // ── Quality: viewport tracking (auto mode) ─────────────────
+  useEffect(() => {
+    const onResize = () => setViewportH(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // ── Quality: drop stored preference if this video lacks it ─
+  const effectivePref =
+    qualityPref !== 'auto' &&
+    variants.length > 0 &&
+    !variants.some((v) => v.label === qualityPref)
+      ? 'auto'
+      : qualityPref
+
+  // ── Quality: fetch + poll variants while they are generated ─
+  useEffect(() => {
+    if (!videoId) return
+    const initial = useAppStore.getState().playerVideo?.qualities
+    const busy = initial?.some((v) => v.status === 'PROCESSING') ?? false
+    if (initial && initial.length > 0 && !busy) return
+    let cancelled = false
+    let timer: number | null = null
+    let attempts = 0
+    const tick = async () => {
+      attempts += 1
+      try {
+        const res = await fetch(`/api/videos/${videoId}`, { cache: 'no-store' })
+        if (res.ok) {
+          const data = (await res.json()) as {
+            video?: { qualities?: QualityVariantDTO[] }
+          }
+          if (cancelled) return
+          const q = data.video?.qualities
+          if (q && q.length > 0) {
+            setVariants(q)
+            if (q.some((v) => v.status === 'PROCESSING') && attempts < 150) {
+              timer = window.setTimeout(tick, 4000)
+              return
+            }
+          } else if (attempts < 5) {
+            // Variants not registered yet (transcode job starting up)
+            timer = window.setTimeout(tick, 4000)
+            return
+          }
+        } else if (attempts < 5) {
+          timer = window.setTimeout(tick, 6000)
+          return
+        }
+      } catch {
+        if (attempts < 5) timer = window.setTimeout(tick, 6000)
+        return
+      }
+    }
+    void tick()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [videoId])
+
+  // ── Quality: resolve the active playback source ────────────
+  const readyVariants = useMemo(
+    () => variants.filter((v) => v.status === 'READY'),
+    [variants],
+  )
+  const autoVariant = useMemo(
+    () => resolveAutoVariant(readyVariants, viewportH),
+    [readyVariants, viewportH],
+  )
+  const activeSrc = useMemo(() => {
+    if (effectivePref !== 'auto') {
+      const chosen = readyVariants.find((v) => v.label === effectivePref)
+      if (chosen) return chosen.filePath
+    }
+    return autoVariant?.filePath ?? video?.srcUrl ?? ''
+  }, [effectivePref, readyVariants, autoVariant, video])
+  const activeQualityLabel = useMemo(() => {
+    const playingNow = readyVariants.find((v) => v.filePath === activeSrc)
+    return playingNow ? qualityDisplayLabel(playingNow.label) : null
+  }, [readyVariants, activeSrc])
+  const autoQualityLabel = useMemo(
+    () => (autoVariant ? qualityDisplayLabel(autoVariant.label) : null),
+    [autoVariant],
+  )
+
+  // ── Quality: preserve playback position across source swaps ─
+  useEffect(() => {
+    if (!videoId) {
+      prevActiveSrcRef.current = null
+      return
+    }
+    if (prevActiveSrcRef.current !== null && prevActiveSrcRef.current !== activeSrc) {
+      pendingQualitySeekRef.current = {
+        t:
+          positionRef.current && positionRef.current.id === videoId
+            ? positionRef.current.time
+            : 0,
+        wasPlaying: playingRef.current,
+      }
+    }
+    prevActiveSrcRef.current = activeSrc
+  }, [activeSrc, videoId])
+
   // ── Global timer cleanup on unmount ──────────────────────────
   useEffect(
     () => () => {
@@ -575,6 +700,16 @@ export default function PlayerScreen() {
     const metaDur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : video.duration
     setDuration(metaDur)
     setNatural({ w: v.videoWidth, h: v.videoHeight })
+    // Quality swap: restore position and playback state (before resume-once logic)
+    if (pendingQualitySeekRef.current) {
+      const seek = pendingQualitySeekRef.current
+      pendingQualitySeekRef.current = null
+      if (seek.t > 0.25 && seek.t < metaDur - 0.5) {
+        v.currentTime = seek.t
+        setCurrentTime(seek.t)
+      }
+      if (seek.wasPlaying) void v.play().catch(() => {})
+    }
     if (resumeAppliedRef.current !== video.id) {
       resumeAppliedRef.current = video.id
       const s = useAppStore.getState().settings
@@ -656,12 +791,14 @@ export default function PlayerScreen() {
 
   const handlePlayEvent = () => {
     setPlaying(true)
+    playingRef.current = true
     setWaiting(false)
     if (!startupGate && !adRef.current) setMainStarted(true)
   }
 
   const handlePauseEvent = () => {
     setPlaying(false)
+    playingRef.current = false
     saveProgressNow()
   }
 
@@ -685,6 +822,7 @@ export default function PlayerScreen() {
 
   const handleVideoError = () => {
     const v = videoRef.current
+    playingRef.current = false
     const code = v?.error?.code
     const messages: Record<number, string> = {
       1: 'Loading aborted',
@@ -725,6 +863,20 @@ export default function PlayerScreen() {
     speedTouchedRef.current = true
     setSpeed(s)
     toast(`Speed ${s}×`)
+  }
+
+  const changeQuality = (label: string) => {
+    setQualityPref(label)
+    try {
+      window.localStorage.setItem('vx_quality', label)
+    } catch {
+      /* storage unavailable */
+    }
+    if (label === 'auto') {
+      toast(`Quality: Auto${autoVariant ? ` · ${qualityDisplayLabel(autoVariant.label)}` : ''}`)
+    } else {
+      toast(`Quality: ${qualityDisplayLabel(label)}`)
+    }
   }
 
   const handleAspect = (a: AspectMode) => {
@@ -791,7 +943,7 @@ export default function PlayerScreen() {
         <video
           key={video.id}
           ref={videoRef}
-          src={video.srcUrl}
+          src={activeSrc}
           playsInline
           preload="auto"
           className={useNaturalSize ? '' : 'h-full w-full'}
@@ -927,7 +1079,7 @@ export default function PlayerScreen() {
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-white">{video.title}</div>
                 <div className="truncate text-xs text-white/55">
-                  {video.folder} · {video.resolutionLabel}
+                  {video.folder} · {activeQualityLabel ?? video.resolutionLabel}
                 </div>
               </div>
             </div>
@@ -970,6 +1122,11 @@ export default function PlayerScreen() {
             subBgOpacity={subBgOpacity}
             audioTrack={audioTrack}
             defaultSpeed={settings?.defaultSpeed ?? 1}
+            qualities={variants}
+            qualityPref={readyVariants.length === 0 ? 'auto' : effectivePref}
+            activeQualityLabel={activeQualityLabel}
+            autoQualityLabel={autoQualityLabel}
+            onQuality={changeQuality}
             onTogglePlay={togglePlay}
             onSeek={(t) => handleSeekCommit(t, t - currentTime)}
             onStep={stepSeek}
