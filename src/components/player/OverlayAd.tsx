@@ -57,7 +57,11 @@ export default function OverlayAd({ ad, videoId, onClose }: OverlayAdProps) {
 
   const handleCta = () => {
     void trackAdEvent(ad, 'CLICK', videoId)
-    toast(`${ad.ctaText ?? 'Learn more'} — sponsored by ${ad.advertiser} (demo)`)
+    if (ad.ctaUrl) {
+      window.open(ad.ctaUrl, '_blank', 'noopener,noreferrer')
+    } else {
+      toast(`${ad.ctaText ?? 'Learn more'} — sponsored by ${ad.advertiser}`)
+    }
   }
 
   const ctaButton = ad.ctaText ? (

@@ -49,7 +49,11 @@ export function BannerAd() {
   function handleCta() {
     if (!ad) return
     void trackAdEvent(ad, 'CLICK')
-    toast('Ad clicked (demo)')
+    if (ad.ctaUrl) {
+      window.open(ad.ctaUrl, '_blank', 'noopener,noreferrer')
+    } else {
+      toast(`${ad.ctaText ?? 'Learn more'} — sponsored by ${ad.advertiser}`)
+    }
   }
 
   return (

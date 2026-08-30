@@ -170,3 +170,19 @@ Work Log:
 
 Stage Summary:
 - SHIPPED: VX Player complete — offline-first player app (phone+tablet layouts), full ad engine (pre/mid/post/overlay/banner + caps + kill switches + offline cache), hidden 7-tap desktop admin with 2FA/RBAC/audit/analytics. All 16 AI images in /thumbs, 13 local videos in /media. Dev server on :3000 healthy.
+
+---
+Task ID: 5
+Agent: main (Z.ai Code)
+Task: Remove ALL demo videos and demo ads — production-clean state.
+
+Work Log:
+- Rewrote prisma/seed.ts to a clean baseline seed: wipes all tables then seeds ONLY the AppSettings singleton + 3 admin accounts (SUPER_ADMIN/AD_MANAGER/VIEWER). Removed: 13 demo videos, history, favorites, 3 playlists, 5 ad campaigns + 8 creatives, 30-day DailyStat fake analytics, ~11k seeded AdEvents, fake audit-log entries.
+- Ran `bun prisma/seed.ts` → DB verified: videos 0, campaigns 0, creatives 0, adEvents 0, dailyStats 0, history 0, playlists 0, audit 0; admins 3, settings 1.
+- Deleted public/media/ entirely (13 demo MP4s) and all demo thumbnails; public/thumbs/ keeps only vx_logo.png (app icon used by layout.tsx).
+- De-demoed ad click behavior: BannerAd + OverlayAd CTAs now open creative.ctaUrl in a new tab when present (neutral sponsored-by toast otherwise); AdOverlay "Why this ad?" now explains real campaign/placement targeting instead of "Demo:" toast.
+- Verified UI empty states via agent-browser: Home ("Your library is empty"), Videos ("No videos here"), Playlists ("No playlists yet" + create CTA), History, admin login → dashboard (all-zero cards, charts render empty, no NaN), Campaigns ("No campaigns yet"), Ads Manager (kill switches + ADS LIVE badge intact), Analytics/Reports (0.0% completion, no NaN/Infinity/undefined), Audit (only real LOGIN/LOGOUT rows). grep for demo campaign names in src: none. curl: /api/videos [] , /api/ads/serve → {ad:null}, /api/ads/cache → {ads:[]}, /api/scan → found 0.
+- bun run lint: 0 errors (10 pre-existing warnings). tsc: app files clean.
+
+Stage Summary:
+- App is now production-clean: zero demo videos, zero demo ads, zero fake analytics. Library fills via real scans; ad inventory is created exclusively through Admin → Campaigns/Creatives. Ad engine, kill switches, frequency caps, offline cache and RBAC all remain fully functional and simply serve nothing until real campaigns exist.

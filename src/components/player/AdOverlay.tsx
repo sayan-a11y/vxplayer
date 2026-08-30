@@ -174,7 +174,7 @@ export default function AdOverlay({ ad, phase, videoId, onComplete }: AdOverlayP
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-4 pt-10">
         <div className="flex items-end justify-between gap-3">
           <button
-            onClick={() => toast('Demo: targeted by campaign scheduling')}
+            onClick={() => toast(`Served from an active campaign matching this placement · ${ad.campaignName}`)}
             className="text-[11px] text-white/45 underline-offset-2 transition-colors hover:text-white/80 hover:underline"
           >
             Why this ad?
