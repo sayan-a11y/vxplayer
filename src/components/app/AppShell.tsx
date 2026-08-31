@@ -35,6 +35,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Switch } from '@/components/ui/switch'
 
 import { FavoritesView } from './FavoritesView'
+import { FooterAd } from './FooterAd'
 import { FoldersView } from './FoldersView'
 import { HistoryView } from './HistoryView'
 import { HomeView } from './HomeView'
@@ -328,10 +329,29 @@ export function AppShell() {
           </div>
         </aside>
 
-        {/* Main content */}
-        <main className="vx-scroll min-w-0 flex-1 px-4 pt-6 pb-28 md:px-8 md:pb-10">
-          {renderView(view)}
-        </main>
+        {/* Main column — content + footer stacked so the footer pins to the
+            viewport bottom on short pages and is pushed down on long ones
+            (on mobile the sidebar is hidden, so this is the full width). */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className="vx-scroll min-w-0 flex-1 px-4 pt-6 pb-8 md:px-8 md:pb-10">
+            {renderView(view)}
+          </main>
+
+          {/* ── Footer (ad banner + branding) ─────────────────────── */}
+          <footer className="mt-auto border-t border-white/5 bg-black/40 backdrop-blur-xl">
+            <div className="px-4 pt-4 md:px-6">
+              <FooterAd />
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 pb-[calc(1.25rem+4rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-5">
+              <p className="text-[11px] text-muted-foreground">
+                © {new Date().getFullYear()} VX Player · Play Everything. Anywhere. Offline.
+              </p>
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
+                Offline-first · No account needed
+              </p>
+            </div>
+          </footer>
+        </div>
       </div>
 
       {/* ── Mobile bottom nav ──────────────────────────────────── */}
