@@ -8,6 +8,7 @@
  */
 import { toast } from 'sonner'
 
+import { fastUploadFile } from '@/lib/fast-upload-client'
 import { useAppStore, type UploadTask } from '@/lib/store'
 import type { VideoDTO } from '@/lib/types'
 
@@ -21,27 +22,16 @@ export function requestVideoPick() {
 
 type UploadResponse = { video: VideoDTO; duplicate: boolean }
 
-function uploadOne(file: File, id: string, onProgress: (pct: number) => void): Promise<UploadResponse> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', `/api/videos/upload?name=${encodeURIComponent(file.name)}`)
-    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
-    }
-    xhr.onload = () => {
-      try {
-        const body = JSON.parse(xhr.responseText) as UploadResponse & { error?: string }
-        if (xhr.status >= 200 && xhr.status < 300) resolve(body)
-        else reject(new Error(body.error || 'Import failed'))
-      } catch {
-        reject(new Error('Import failed'))
-      }
-    }
-    xhr.onerror = () => reject(new Error('Network error during upload'))
-    xhr.onabort = () => reject(new Error('Upload cancelled'))
-    xhr.send(file)
-  })
+/**
+ * Upload one file through the fast engine (single-shot streaming for
+ * small files, parallel chunked upload with retries for big ones).
+ */
+async function uploadOne(file: File, onProgress: (pct: number) => void): Promise<UploadResponse> {
+  const body = (await fastUploadFile({ file, kind: 'video', onProgress })) as UploadResponse & {
+    error?: string
+  }
+  if (!body.video) throw new Error(body.error || 'Import failed')
+  return body
 }
 
 /** Import the selected files one-by-one with live progress in the tray. */
@@ -62,7 +52,7 @@ export async function importVideoFiles(files: File[]) {
     const base: UploadTask = { id, name: file.name, pct: 0, status: 'uploading' }
     useAppStore.getState().upsertUpload(base)
     try {
-      const res = await uploadOne(file, id, (pct) => {
+      const res = await uploadOne(file, (pct) => {
         useAppStore.getState().upsertUpload({
           id,
           name: file.name,

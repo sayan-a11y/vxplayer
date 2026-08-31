@@ -113,3 +113,54 @@ export async function writeAudit(
     data: { adminName: user?.name ?? adminEmail, adminEmail, action, target, detail },
   })
 }
+
+// ── Creative payload validation (shared by POST create and PATCH update) ──
+
+export type CreativeInput = {
+  name?: unknown
+  type?: unknown
+  mediaUrl?: unknown
+  duration?: unknown
+  skipAfter?: unknown
+  position?: unknown
+  headline?: unknown
+  bodyText?: unknown
+  ctaText?: unknown
+  ctaUrl?: unknown
+}
+
+export type CreativeData = {
+  name: string
+  type: string
+  mediaUrl: string | null
+  duration: number
+  skipAfter: number
+  position: string | null
+  headline: string | null
+  bodyText: string | null
+  ctaText: string | null
+  ctaUrl: string | null
+}
+
+/** Validate one creative payload (campaignId is attached by the caller). */
+export function buildCreativeData(raw: CreativeInput): CreativeData | null {
+  if (typeof raw.name !== 'string' || !raw.name.trim()) return null
+  if (typeof raw.type !== 'string' || !CREATIVE_TYPES.includes(raw.type)) return null
+  const opt = (v: unknown): string | null =>
+    typeof v === 'string' && v.trim() ? v.trim() : null
+  return {
+    name: raw.name.trim(),
+    type: raw.type,
+    mediaUrl: opt(raw.mediaUrl),
+    duration: typeof raw.duration === 'number' && raw.duration >= 0 ? Math.round(raw.duration) : 15,
+    skipAfter: typeof raw.skipAfter === 'number' ? Math.round(raw.skipAfter) : 5,
+    position:
+      raw.position === 'TOP' || raw.position === 'BOTTOM' || raw.position === 'CENTER'
+        ? raw.position
+        : null,
+    headline: opt(raw.headline),
+    bodyText: opt(raw.bodyText),
+    ctaText: opt(raw.ctaText),
+    ctaUrl: opt(raw.ctaUrl),
+  }
+}

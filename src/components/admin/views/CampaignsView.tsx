@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Megaphone, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
+import { fastUploadFile } from '@/lib/fast-upload-client'
 import { useAppStore } from '@/lib/store'
 import {
   AlertDialog,
@@ -195,53 +196,37 @@ export default function CampaignsView() {
     }))
   }
 
-  /** Upload a creative asset (video/image from device storage) with progress. */
-  function uploadCreativeMedia(idx: number, file: File) {
+  /** Upload a creative asset (video/image from device storage) — fast engine with parallel chunks + retries. */
+  async function uploadCreativeMedia(idx: number, file: File) {
     const token = useAppStore.getState().adminToken
-    const xhr = new XMLHttpRequest()
     setMediaUpload({ idx, pct: 0 })
-    xhr.open('POST', `/api/admin/creatives/upload?name=${encodeURIComponent(file.name)}`)
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) setMediaUpload({ idx, pct: Math.round((e.loaded / e.total) * 100) })
-    }
-    xhr.onload = () => {
-      setMediaUpload(null)
-      try {
-        const body = JSON.parse(xhr.responseText) as {
-          url?: string
-          kind?: string
-          duration?: number | null
-          error?: string
-        }
-        if (xhr.status >= 200 && xhr.status < 300 && body.url) {
-          const patch: Partial<CreativeForm> = { mediaUrl: body.url }
-          if (body.kind === 'video' && typeof body.duration === 'number' && body.duration > 0) {
-            patch.duration = body.duration
-          }
-          const autoName = file.name.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim()
-          setForm((f) => ({
-            ...f,
-            creatives: f.creatives.map((c, i) =>
-              i === idx
-                ? { ...c, ...patch, name: c.name.trim() ? c.name : autoName || c.name }
-                : c,
-            ),
-          }))
-          toast.success(`Media uploaded${body.kind === 'video' && body.duration ? ` · ${body.duration}s detected` : ''}`)
-        } else {
-          toast.error(body.error || 'Upload failed')
-        }
-      } catch {
-        toast.error('Upload failed')
+    try {
+      const body = (await fastUploadFile({
+        file,
+        kind: 'creative',
+        token,
+        onProgress: (pct) => setMediaUpload({ idx, pct }),
+      })) as { url?: string; kind?: string; duration?: number | null; error?: string }
+      if (!body.url) throw new Error(body.error || 'Upload failed')
+      const patch: Partial<CreativeForm> = { mediaUrl: body.url }
+      if (body.kind === 'video' && typeof body.duration === 'number' && body.duration > 0) {
+        patch.duration = body.duration
       }
-    }
-    xhr.onerror = () => {
+      const autoName = file.name.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim()
+      setForm((f) => ({
+        ...f,
+        creatives: f.creatives.map((c, i) =>
+          i === idx
+            ? { ...c, ...patch, name: c.name.trim() ? c.name : autoName || c.name }
+            : c,
+        ),
+      }))
+      toast.success(`Media uploaded${body.kind === 'video' && body.duration ? ` · ${body.duration}s detected` : ''}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
       setMediaUpload(null)
-      toast.error('Network error during upload')
     }
-    xhr.send(file)
   }
 
   async function save() {

@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
-import { BannerAd } from './BannerAd'
+import { HeroAdBanner } from './HeroAdBanner'
 import { VideoCard } from './VideoCard'
 
 type FolderCard = { name: string; count: number; sizeMB: number }
@@ -177,7 +177,7 @@ export function HomeView() {
   if (videos === null && error) {
     return (
       <div>
-        <BannerAd />
+        <HeroAdBanner />
         <div className="px-4 py-2 md:px-6">
           <div className="flex flex-col items-center gap-3 py-10 text-center">
             <div className="grid size-14 place-items-center rounded-2xl bg-[var(--vx-accent)]/10 text-[var(--vx-accent-soft)]">
@@ -200,7 +200,7 @@ export function HomeView() {
   if (videos === null || playlists === null) {
     return (
       <div>
-        <BannerAd />
+        <HeroAdBanner />
         <HomeSkeleton />
       </div>
     )
@@ -209,7 +209,7 @@ export function HomeView() {
   if (videos.length === 0) {
     return (
       <div>
-        <BannerAd />
+        <HeroAdBanner />
         <div className="flex flex-col items-center gap-2 py-20 text-center">
           <div className="grid size-14 place-items-center rounded-2xl border border-white/5 bg-white/5 text-muted-foreground">
             <Clapperboard className="size-7" />
@@ -240,7 +240,7 @@ export function HomeView() {
 
   return (
     <div>
-      <BannerAd />
+      <HeroAdBanner />
       <div className="px-4 pb-2 md:px-6">
         {continueWatching.length > 0 && (
           <Section title="Continue Watching" icon={History} onSeeAll={() => setView('history')}>

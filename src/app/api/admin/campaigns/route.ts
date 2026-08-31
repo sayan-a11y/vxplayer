@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/admin-auth'
 import {
   ALL_PLACEMENTS,
   CAMPAIGN_MUTATION_ROLES,
+  buildCreativeData,
+  type CreativeInput,
   CAMPAIGN_PRIORITIES,
   CAMPAIGN_STATUSES,
   CREATIVE_TYPES,
@@ -33,56 +35,6 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error('GET /api/admin/campaigns failed:', err)
     return NextResponse.json({ error: 'Failed to load campaigns' }, { status: 500 })
-  }
-}
-
-type CreativeInput = {
-  name?: unknown
-  type?: unknown
-  mediaUrl?: unknown
-  duration?: unknown
-  skipAfter?: unknown
-  position?: unknown
-  headline?: unknown
-  bodyText?: unknown
-  ctaText?: unknown
-  ctaUrl?: unknown
-}
-
-/** Validate one creative payload (campaignId is attached by the caller). */
-function buildCreativeData(
-  raw: CreativeInput
-): Omit<{
-  campaignId: string
-  name: string
-  type: string
-  mediaUrl: string | null
-  duration: number
-  skipAfter: number
-  position: string | null
-  headline: string | null
-  bodyText: string | null
-  ctaText: string | null
-  ctaUrl: string | null
-}, 'campaignId'> | null {
-  if (typeof raw.name !== 'string' || !raw.name.trim()) return null
-  if (typeof raw.type !== 'string' || !CREATIVE_TYPES.includes(raw.type)) return null
-  const opt = (v: unknown): string | null =>
-    typeof v === 'string' && v.trim() ? v.trim() : null
-  return {
-    name: raw.name.trim(),
-    type: raw.type,
-    mediaUrl: opt(raw.mediaUrl),
-    duration: typeof raw.duration === 'number' && raw.duration >= 0 ? Math.round(raw.duration) : 15,
-    skipAfter: typeof raw.skipAfter === 'number' ? Math.round(raw.skipAfter) : 5,
-    position:
-      raw.position === 'TOP' || raw.position === 'BOTTOM' || raw.position === 'CENTER'
-        ? raw.position
-        : null,
-    headline: opt(raw.headline),
-    bodyText: opt(raw.bodyText),
-    ctaText: opt(raw.ctaText),
-    ctaUrl: opt(raw.ctaUrl),
   }
 }
 

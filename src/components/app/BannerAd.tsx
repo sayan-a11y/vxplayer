@@ -59,7 +59,24 @@ export function BannerAd() {
   return (
     <div className="relative z-10 mx-4 mt-4 md:mx-6" role="complementary" aria-label="Sponsored">
       <div className="vx-card flex h-14 items-center gap-3 overflow-hidden rounded-xl pl-3 pr-10">
-        {(ad.type === 'IMAGE' || ad.type === 'BANNER') && ad.mediaUrl ? (
+        {ad.type === 'VIDEO' && ad.mediaUrl ? (
+          <button
+            type="button"
+            onClick={handleCta}
+            className="relative h-full w-full overflow-hidden"
+            aria-label={ad.headline ?? 'Advertisement'}
+          >
+            <video
+              src={ad.mediaUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              className="h-full w-full object-cover"
+            />
+          </button>
+        ) : (ad.type === 'IMAGE' || ad.type === 'BANNER') && ad.mediaUrl ? (
           <button
             type="button"
             onClick={handleCta}

@@ -7,10 +7,13 @@ import {
   CAMPAIGN_PRIORITIES,
   CAMPAIGN_STATUSES,
   SETTINGS_ADMIN_ROLES,
+  buildCreativeData,
   campaignStatsMap,
   toCampaignDTO,
   writeAudit,
   ZERO_STATS,
+  type CreativeData,
+  type CreativeInput,
 } from '../utils'
 
 export const dynamic = 'force-dynamic'
@@ -102,7 +105,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       data.placements = list.join(',')
     }
 
+    // Creatives: when provided, validate and replace the full set.
+    let creativesData: CreativeData[] | null = null
+    if ('creatives' in body) {
+      if (!Array.isArray(body.creatives)) {
+        return NextResponse.json({ error: 'creatives must be an array' }, { status: 400 })
+      }
+      const parsed = (body.creatives as CreativeInput[]).map((c) => buildCreativeData(c))
+      if (parsed.some((c) => c === null)) {
+        return NextResponse.json(
+          { error: 'Each creative needs a name and a valid type' },
+          { status: 400 },
+        )
+      }
+      creativesData = parsed as CreativeData[]
+    }
+
     const updated = await db.campaign.update({ where: { id }, data, include: { creatives: true } })
+
+    let finalRow = updated
+    if (creativesData) {
+      await db.$transaction([
+        db.creative.deleteMany({ where: { campaignId: id } }),
+        db.creative.createMany({
+          data: creativesData.map((c) => ({ ...c, campaignId: id })),
+        }),
+      ])
+      finalRow = await db.campaign.findUniqueOrThrow({
+        where: { id },
+        include: { creatives: { orderBy: { createdAt: 'asc' } } },
+      })
+    }
 
     // Audit action reflects status transitions (pause / re-activate / generic update).
     let action = 'CAMPAIGN_UPDATED'
@@ -125,7 +158,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const stats = await campaignStatsMap()
     return NextResponse.json({
-      campaign: toCampaignDTO(updated, stats.get(id) ?? ZERO_STATS),
+      campaign: toCampaignDTO(finalRow, stats.get(id) ?? ZERO_STATS),
     })
   } catch (err) {
     console.error('PATCH /api/admin/campaigns/[id] failed:', err)

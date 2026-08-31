@@ -46,7 +46,9 @@ export function allowedCreativeTypes(placement: AdPlacement): string[] {
     case 'OVERLAY':
       return ['IMAGE', 'OVERLAY', 'TEXT']
     case 'BANNER':
-      return ['IMAGE', 'TEXT', 'BANNER']
+      // Banner/hero slot serves admin VIDEO creatives as autoplaying
+      // muted hero spots, plus images and text cards.
+      return ['VIDEO', 'IMAGE', 'TEXT', 'BANNER']
   }
 }
 
