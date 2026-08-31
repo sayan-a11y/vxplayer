@@ -432,6 +432,7 @@ export default function PlayerScreen() {
           videoId: p.id,
           position: Math.floor(p.time),
           duration: Math.floor(p.dur || 0),
+          sessionId: useAppStore.getState().sessionId || undefined,
         }).catch(() => {})
       }
     }
@@ -659,6 +660,7 @@ export default function PlayerScreen() {
       videoId: video.id,
       position: pos,
       duration: Math.floor(d || 0),
+      sessionId: useAppStore.getState().sessionId || undefined,
     }).catch(() => {})
   }
 

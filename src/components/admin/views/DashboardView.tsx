@@ -55,9 +55,9 @@ import {
 } from '../shared'
 
 const CARDS: { key: keyof DashboardDTO['cards']; label: string; icon: LucideIcon; accent?: boolean; danger?: boolean; suffix?: string }[] = [
-  { key: 'totalUsers', label: 'Total users', icon: Users },
-  { key: 'activeUsers', label: 'Active users', icon: UserCheck },
-  { key: 'newUsers', label: 'New users', icon: UserPlus },
+  { key: 'totalUsers', label: 'Total viewers', icon: Users },
+  { key: 'activeUsers', label: 'Active viewers · 7d', icon: UserCheck },
+  { key: 'newUsers', label: 'New viewers · 7d', icon: UserPlus },
   { key: 'videosPlayed', label: 'Videos played', icon: Film },
   { key: 'sessions', label: 'Playback sessions', icon: PlayCircle },
   { key: 'watchTimeMin', label: 'Watch time', icon: Clock, suffix: ' min' },
@@ -109,6 +109,23 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-6">
+      {/* Real-data notice */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className="vx-chip border-emerald-400/30 bg-emerald-400/10 text-[11px] font-semibold text-emerald-300"
+          role="status"
+        >
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+          </span>
+          Live data
+        </span>
+        <p className="text-xs text-white/45">
+          All metrics are computed in real time from actual playback and ad events — no estimates.
+        </p>
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {CARDS.map((c) => {
@@ -129,7 +146,7 @@ export default function DashboardView() {
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="vx-card p-5">
-          <h3 className="text-sm font-medium text-white/80">User growth — active vs new (30 days)</h3>
+          <h3 className="text-sm font-medium text-white/80">Viewers — active vs new (30 days)</h3>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={data.charts.daily} margin={{ top: 12, right: 8, left: -12, bottom: 0 }}>
               <CartesianGrid stroke={GRID_STROKE} vertical={false} />

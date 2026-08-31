@@ -58,7 +58,10 @@ model HistoryEntry {
   video        Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
   position     Int // seconds
   watchedPct   Float // 0..100
+  sessionId    String? // anonymous viewer session that played this video
   lastPlayedAt DateTime @default(now())
+
+  @@index([sessionId])
 }
 
 model Playlist {

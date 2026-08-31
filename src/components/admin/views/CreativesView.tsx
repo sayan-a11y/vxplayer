@@ -1,13 +1,24 @@
 'use client'
 
-// Ad Creatives — read-only cross-campaign inventory of creative assets.
+// Ad Creatives — cross-campaign inventory of creative assets with delete.
 
 import { useCallback, useEffect, useState } from 'react'
-import { ImagePlay, Info } from 'lucide-react'
+import { ImagePlay, Info, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDuration } from '@/lib/format'
 import type { CreativeDTO } from '@/lib/types'
-import { adminGet } from '../session'
+import { adminDelete, adminGet, can, useAdminSession } from '../session'
 import { CreativeTypeBadge, EmptyState, ErrorState, LoadingBlock, PageHeader } from '../shared'
 
 /** CreativeDTO joined with campaign info (server adds campaignName). */
@@ -20,9 +31,13 @@ function skipLabel(skipAfter: number): string {
 }
 
 export default function CreativesView() {
+  const session = useAdminSession()
+  const canDelete = can(session?.role, 'campaigns')
   const [creatives, setCreatives] = useState<CreativeRow[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [target, setTarget] = useState<CreativeRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -41,11 +56,26 @@ export default function CreativesView() {
     void load()
   }, [load])
 
+  async function confirmDelete() {
+    if (!target) return
+    setDeleting(true)
+    try {
+      await adminDelete(`/api/admin/creatives/${target.id}`)
+      setCreatives((prev) => (prev ? prev.filter((c) => c.id !== target.id) : prev))
+      toast.success(`Creative deleted — ${target.name}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete creative')
+    } finally {
+      setDeleting(false)
+      setTarget(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Ad Creatives"
-        description="All creative assets across campaigns (read-only)"
+        description="All creative assets across campaigns — preview, audit and delete"
         actions={
           <span className="vx-chip">
             <Info className="h-3.5 w-3.5" /> Manage creatives in Campaigns
@@ -75,6 +105,7 @@ export default function CreativesView() {
                   <TableHead className="text-white/45">Skip</TableHead>
                   <TableHead className="text-white/45">Position</TableHead>
                   <TableHead className="text-white/45">Headline</TableHead>
+                  {canDelete && <TableHead className="text-white/45">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -113,6 +144,18 @@ export default function CreativesView() {
                     <TableCell className="whitespace-nowrap text-white/70">{skipLabel(c.skipAfter)}</TableCell>
                     <TableCell className="text-white/60">{c.position ?? '—'}</TableCell>
                     <TableCell className="max-w-[200px] truncate text-white/60">{c.headline ?? '—'}</TableCell>
+                    {canDelete && (
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => setTarget(c)}
+                          aria-label={`Delete creative ${c.name}`}
+                          className="grid size-9 place-items-center rounded-lg border border-red-400/20 bg-red-400/10 text-red-300 transition hover:border-red-400/40 hover:bg-red-400/20 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -120,6 +163,38 @@ export default function CreativesView() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!target} onOpenChange={(open) => !open && setTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete creative?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes <span className="font-semibold text-white/80">{target?.name}</span>
+              {target?.campaignName ? (
+                <>
+                  {' '}from campaign <span className="font-semibold text-white/80">{target.campaignName}</span>
+                </>
+              ) : null}
+              , deletes its media file and stops it from being served in any placement. Existing
+              analytics stay in reports. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault()
+                void confirmDelete()
+              }}
+              className="bg-red-500/90 text-white hover:bg-red-500"
+            >
+              {deleting ? 'Deleting…' : 'Delete creative'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

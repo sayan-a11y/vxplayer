@@ -58,7 +58,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as
-      | { videoId?: unknown; position?: unknown; duration?: unknown }
+      | { videoId?: unknown; position?: unknown; duration?: unknown; sessionId?: unknown }
       | null
     if (
       !body ||
@@ -78,11 +78,13 @@ export async function POST(req: Request) {
     const position = Math.max(0, Math.round(body.position))
     const duration = Math.max(0, body.duration)
     const watchedPct = duration > 0 ? Math.min(100, (position / duration) * 100) : 0
+    const sessionId =
+      typeof body.sessionId === 'string' && body.sessionId.trim() ? body.sessionId.trim() : null
 
     await db.historyEntry.upsert({
       where: { videoId: body.videoId },
-      create: { videoId: body.videoId, position, watchedPct },
-      update: { position, watchedPct, lastPlayedAt: new Date() },
+      create: { videoId: body.videoId, position, watchedPct, sessionId },
+      update: { position, watchedPct, sessionId, lastPlayedAt: new Date() },
     })
 
     return NextResponse.json({ ok: true })

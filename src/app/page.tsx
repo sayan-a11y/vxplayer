@@ -1,15 +1,20 @@
 'use client'
 
 import { useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Toaster } from 'sonner'
 import AppShell from '@/components/app/AppShell'
-import PlayerScreen from '@/components/player/PlayerScreen'
-import AdminLogin from '@/components/admin/AdminLogin'
-import AdminApp from '@/components/admin/AdminApp'
 import { initClientSession, useAppStore } from '@/lib/store'
 import { apiGet } from '@/lib/api'
 import { refreshAdCache } from '@/lib/ads-client'
 import type { SettingsDTO } from '@/lib/types'
+
+// Code-split heavy surfaces so the player's first load stays fast: the
+// admin panel (recharts dashboards) and the fullscreen player only
+// download their chunks when they are actually opened.
+const AdminApp = dynamic(() => import('@/components/admin/AdminApp'))
+const AdminLogin = dynamic(() => import('@/components/admin/AdminLogin'))
+const PlayerScreen = dynamic(() => import('@/components/player/PlayerScreen'))
 
 /** Apply theme + accent to <html> from settings (dark-first). */
 function applyAppearance(settings: SettingsDTO | null) {
@@ -55,9 +60,23 @@ export default function Home() {
     let cancelled = false
     void (async () => {
       try {
+        // Apply cached appearance instantly, then refresh from the server.
+        const cached = typeof localStorage !== 'undefined' ? localStorage.getItem('vx_settings') : null
+        if (cached) {
+          try {
+            applyAppearance(JSON.parse(cached) as SettingsDTO)
+          } catch {
+            /* ignore malformed cache */
+          }
+        }
         const { settings } = await apiGet<{ settings: SettingsDTO }>('/api/settings')
         if (cancelled) return
         useAppStore.getState().setSettings(settings)
+        try {
+          localStorage.setItem('vx_settings', JSON.stringify(settings))
+        } catch {
+          /* storage full — ignore */
+        }
         applyAppearance(settings)
         void refreshAdCache(false)
       } catch {
