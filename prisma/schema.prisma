@@ -97,13 +97,15 @@ model AdminUser {
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  adminName String
-  adminEmail String
-  action    String // LOGIN | LOGOUT | CAMPAIGN_CREATED | CAMPAIGN_UPDATED | CAMPAIGN_DELETED | ADS_KILL_SWITCH | SETTINGS_UPDATED | ...
-  target    String?
-  detail    String?
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  adminName  String
+  adminEmail String?
+  adminRole  String?
+  action     String // LOGIN | LOGOUT | CAMPAIGN_CREATED | CAMPAIGN_UPDATED | CAMPAIGN_DELETED | ADS_KILL_SWITCH | SETTINGS_UPDATED | ...
+  target     String?
+  detail     String?
+  details    String?
+  createdAt  DateTime @default(now())
 }
 
 // ─── Advertising ────────────────────────────────────────────────────────────

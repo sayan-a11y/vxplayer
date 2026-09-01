@@ -59,20 +59,31 @@ export async function ensureSchema(): Promise<void> {
       }).catch(() => {})
     }
 
-    // 2. Ensure Super Admin exists
-    const admin = await db.adminUser.findUnique({ where: { email: 'admin@vxplayer.com' } }).catch(() => null)
-    if (!admin) {
-      const crypto = await import('crypto')
-      const passwordHash = crypto.createHmac('sha256', 'vx-player-demo-secret-2026').update('pw:VXAdmin@2026').digest('hex')
-      await db.adminUser.create({
-        data: {
-          email: 'admin@vxplayer.com',
-          passwordHash,
-          name: 'Super Admin',
-          role: 'SUPER_ADMIN',
-          twoFactor: true,
-        },
-      }).catch(() => {})
+    // 2. Ensure Super Admin accounts exist
+    const crypto = await import('crypto')
+    const secret = process.env.ADMIN_TOKEN_SECRET || 'vx-player-demo-secret-2026'
+    const hash = (pw: string) => crypto.createHmac('sha256', secret).update(`pw:${pw}`).digest('hex')
+
+    const defaultAdmins = [
+      { email: 'admin@vxplayer.com', name: 'Super Admin', role: 'SUPER_ADMIN', pw: 'VXAdmin@2026' },
+      { email: 'sayankarmakar159@gmail.com', name: 'Sayan Karmakar', role: 'SUPER_ADMIN', pw: 'VXPlayer@2026Db' },
+      { email: 'ads@vxplayer.com', name: 'Ad Manager', role: 'AD_MANAGER', pw: 'Ads@2026' },
+      { email: 'viewer@vxplayer.com', name: 'Analyst', role: 'VIEWER', pw: 'Viewer@2026' },
+    ]
+
+    for (const a of defaultAdmins) {
+      const existing = await db.adminUser.findUnique({ where: { email: a.email } }).catch(() => null)
+      if (!existing) {
+        await db.adminUser.create({
+          data: {
+            email: a.email,
+            passwordHash: hash(a.pw),
+            name: a.name,
+            role: a.role,
+            twoFactor: true,
+          },
+        }).catch(() => {})
+      }
     }
 
     globalForPrisma.schemaInitialized = true
