@@ -86,7 +86,11 @@ export async function GET(req: Request) {
     })
 
     const candidates = campaigns
-      .filter((c) => c.placements.split(',').includes(placement))
+      .filter((c) => {
+        if (!c.placements || c.placements.trim() === '') return true
+        const list = c.placements.split(',').map((p) => p.trim())
+        return list.includes(placement) || list.includes('ALL')
+      })
       .sort((a, b) => {
         const diff = byPriorityDesc(a, b)
         return diff !== 0 ? diff : Math.random() - 0.5

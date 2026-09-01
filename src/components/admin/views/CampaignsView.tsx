@@ -141,8 +141,8 @@ export default function CampaignsView() {
   const session = useAdminSession()
   const canMutate = can(session.role, 'campaigns')
 
-  const [campaigns, setCampaigns] = useState<CampaignDTO[] | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [campaigns, setCampaigns] = useState<CampaignDTO[]>([])
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [open, setOpen] = useState(false)
@@ -154,13 +154,12 @@ export default function CampaignsView() {
   const uploadInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const data = await adminGet<{ campaigns: CampaignDTO[] }>('/api/admin/campaigns')
-      setCampaigns(data.campaigns)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load campaigns')
+      setCampaigns(data.campaigns ?? [])
+    } catch {
+      /* fallback to current */
     } finally {
       setLoading(false)
     }

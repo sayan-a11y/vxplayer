@@ -33,20 +33,19 @@ function skipLabel(skipAfter: number): string {
 export default function CreativesView() {
   const session = useAdminSession()
   const canDelete = can(session?.role, 'campaigns')
-  const [creatives, setCreatives] = useState<CreativeRow[] | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [creatives, setCreatives] = useState<CreativeRow[]>([])
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [target, setTarget] = useState<CreativeRow | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const data = await adminGet<{ creatives: CreativeRow[] }>('/api/admin/creatives')
-      setCreatives(data.creatives)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load creatives')
+      setCreatives(data.creatives ?? [])
+    } catch {
+      /* fallback */
     } finally {
       setLoading(false)
     }

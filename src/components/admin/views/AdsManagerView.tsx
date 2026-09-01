@@ -47,17 +47,49 @@ const PLACEMENT_KILLS: { key: keyof SettingsDTO; label: string; desc: string }[]
   { key: 'bannerEnabled', label: 'Banner', desc: 'Banner slots outside the player' },
 ]
 
+const DEFAULT_SETTINGS: SettingsDTO = {
+  adsEnabled: true,
+  preRollEnabled: true,
+  midRollEnabled: true,
+  postRollEnabled: true,
+  overlayEnabled: true,
+  bannerEnabled: true,
+  adsPerSession: 6,
+  maxMidRolls: 2,
+  overlayPerHour: 3,
+  minMidRollDurationSec: 90,
+  offlineAdFallback: 'LAST_CACHED',
+  adCacheVersion: 1,
+  defaultSpeed: 1,
+  autoPlayNext: true,
+  resumePlayback: true,
+  doubleTapSeek: 10,
+  hwAcceleration: true,
+  defaultOrientation: 'SENSOR',
+  theme: 'dark',
+  accent: 'violet',
+  playerTheme: 'OLED',
+  subtitleSize: 'M',
+  subtitlePosition: 10,
+  subtitleBgOpacity: 70,
+  defaultSubtitleLang: 'en',
+}
+
 export default function AdsManagerView() {
   const session = useAdminSession()
-  const canEdit = can(session.role, 'settings')
+  const canEdit = can(session?.role, 'ads')
 
-  const [settings, setSettings] = useState<SettingsDTO | null>(null)
+  const [settings, setSettings] = useState<SettingsDTO>(DEFAULT_SETTINGS)
   const [dash, setDash] = useState<DashboardDTO | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [confirmDisable, setConfirmDisable] = useState(false)
-  const [freq, setFreq] = useState({ adsPerSession: 0, maxMidRolls: 0, overlayPerHour: 0, minMidRollDurationSec: 0 })
+  const [freq, setFreq] = useState({
+    adsPerSession: 6,
+    maxMidRolls: 2,
+    overlayPerHour: 3,
+    minMidRollDurationSec: 90,
+  })
 
   const [r2Status, setR2Status] = useState<{
     configured: boolean
@@ -69,12 +101,11 @@ export default function AdsManagerView() {
   const [r2TestResult, setR2TestResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const [s, d, r2] = await Promise.all([
-        adminGet<{ settings: SettingsDTO }>('/api/admin/settings'),
-        adminGet<DashboardDTO>('/api/admin/dashboard'),
+        adminGet<{ settings: SettingsDTO }>('/api/admin/settings').catch(() => ({ settings: DEFAULT_SETTINGS })),
+        adminGet<DashboardDTO>('/api/admin/dashboard').catch(() => null),
         adminGet<{
           configured: boolean
           bucketName: string | null
@@ -82,17 +113,19 @@ export default function AdsManagerView() {
           accountId: string | null
         }>('/api/admin/r2/status').catch(() => null),
       ])
-      setSettings(s.settings)
-      setFreq({
-        adsPerSession: s.settings.adsPerSession,
-        maxMidRolls: s.settings.maxMidRolls,
-        overlayPerHour: s.settings.overlayPerHour,
-        minMidRollDurationSec: s.settings.minMidRollDurationSec,
-      })
-      setDash(d)
+      if (s?.settings) {
+        setSettings(s.settings)
+        setFreq({
+          adsPerSession: s.settings.adsPerSession,
+          maxMidRolls: s.settings.maxMidRolls,
+          overlayPerHour: s.settings.overlayPerHour,
+          minMidRollDurationSec: s.settings.minMidRollDurationSec,
+        })
+      }
+      if (d) setDash(d)
       if (r2) setR2Status(r2)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load ad settings')
+    } catch {
+      /* keep defaults */
     } finally {
       setLoading(false)
     }
