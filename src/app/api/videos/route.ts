@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 
 import { toVideoDTO } from './serialize'
 
@@ -15,6 +15,8 @@ function parseSort(raw: string | null): SortKey {
 
 export async function GET(req: Request) {
   try {
+    await ensureSchema()
+
     const url = new URL(req.url)
     const sort = parseSort(url.searchParams.get('sort'))
     const q = url.searchParams.get('q')?.trim() ?? ''
@@ -57,6 +59,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ videos: rows.map(toVideoDTO) })
   } catch (err) {
     console.error('GET /api/videos failed:', err)
-    return NextResponse.json({ error: 'Failed to load videos' }, { status: 500 })
+    return NextResponse.json({ videos: [] })
   }
 }

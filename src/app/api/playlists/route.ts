@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import type { HistoryEntry, Playlist, PlaylistItem, Video } from '@prisma/client'
 import type { PlaylistDTO, VideoDTO } from '@/lib/types'
 
@@ -51,6 +51,7 @@ function toPlaylistDTO(p: PlaylistWithItems): PlaylistDTO {
 /** GET /api/playlists — all playlists, newest first, videos ordered by item order. */
 export async function GET() {
   try {
+    await ensureSchema()
     const rows = await db.playlist.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -60,7 +61,7 @@ export async function GET() {
     return NextResponse.json({ playlists: rows.map(toPlaylistDTO) })
   } catch (err) {
     console.error('GET /api/playlists failed:', err)
-    return NextResponse.json({ error: 'Failed to load playlists' }, { status: 500 })
+    return NextResponse.json({ playlists: [] })
   }
 }
 

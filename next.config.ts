@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Only use standalone output for self-hosted/Docker, not on Vercel
   ...(process.env.VERCEL ? {} : { output: "standalone" }),
+  outputFileTracingIncludes: {
+    '/**': ['./db/**/*', './prisma/**/*'],
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
