@@ -5,21 +5,16 @@ import Image from 'next/image'
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { requestAd, trackAdEvent } from '@/lib/ads-client'
+import { getCachedAd, requestAd, trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
 
 /**
  * Footer ad banner — the black sponsored strip at the bottom of the app
- * (above the branding row, below all content, on every view). Plays
- * admin-uploaded VIDEO creatives (autoplaying muted, looped, with sound +
- * play/pause controls) and IMAGE creatives rendered at maximum quality
- * (quality=100, full-width cover — crisp on 4K/retina panels too).
- * Served live from the BANNER placement: kill switches, session caps and
- * frequency caps all apply. Renders nothing when no ad is eligible.
- * Ads are non-closable.
+ * (above the branding row, below all content, on every view).
+ * Renders instantly from cache (0ms) and syncs live from FOOTER / BANNER.
  */
 export function FooterAd() {
-  const [ad, setAd] = useState<ServedAd | null>(null)
+  const [ad, setAd] = useState<ServedAd | null>(() => getCachedAd('FOOTER') || getCachedAd('BANNER'))
   const [muted, setMuted] = useState(true)
   const [paused, setPaused] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -33,11 +28,12 @@ export function FooterAd() {
       if (!served) {
         served = await requestAd({ placement: 'BANNER' })
       }
-      if (cancelled || !served) return
-      setAd(served)
-      void trackAdEvent(served, 'IMPRESSION')
-      // Image/text creatives have no play event — count START on show.
-      if (served.type !== 'VIDEO') void trackAdEvent(served, 'START')
+      if (cancelled) return
+      if (served) {
+        setAd(served)
+        void trackAdEvent(served, 'IMPRESSION')
+        if (served.type !== 'VIDEO') void trackAdEvent(served, 'START')
+      }
     })()
     return () => {
       cancelled = true

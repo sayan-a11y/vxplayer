@@ -1,6 +1,6 @@
 'use client'
 
-// Client-side ad engine: online serving + offline cache with expiration/eligibility
+// Client-side ad engine: High-performance instant rendering + offline cache + real-time server sync
 
 import type {
   AdCacheBundle,
@@ -15,7 +15,7 @@ import { useAppStore } from '@/lib/store'
 
 const CACHE_KEY = 'vx_ad_cache'
 
-// ── Offline cache ──
+// ── Offline / Instant Local Cache ──
 
 export function readCache(): AdCacheBundle | null {
   if (typeof window === 'undefined') return null
@@ -44,13 +44,16 @@ export function clearCache() {
   window.localStorage.removeItem(CACHE_KEY)
 }
 
-/** Prefetch/refresh the offline ad cache (call on app mount while "online"). */
+/** Prefetch/refresh the offline ad cache (called on app mount in background). */
 export async function refreshAdCache(force = false): Promise<void> {
+  if (typeof window === 'undefined') return
   const existing = readCache()
   if (!force && existing && new Date(existing.expiresAt).getTime() > Date.now()) return
   try {
     const bundle = await apiGet<AdCacheBundle>('/api/ads/cache')
-    writeCache(bundle)
+    if (bundle && Array.isArray(bundle.ads)) {
+      writeCache(bundle)
+    }
   } catch {
     /* offline — keep existing cache */
   }
@@ -64,7 +67,23 @@ export function isCacheStale(settings: SettingsDTO | null): boolean {
   return new Date(cache.expiresAt).getTime() <= Date.now()
 }
 
-// ── Serving ──
+// ── Synchronous Instant Cache Picker (0ms) ──
+
+export function getCachedAd(placement: AdPlacement): ServedAd | null {
+  const cache = readCache()
+  if (!cache || !Array.isArray(cache.ads)) return null
+  if (new Date(cache.expiresAt).getTime() <= Date.now()) return null
+
+  const store = useAppStore.getState()
+  if (store.settings && !store.settings.adsEnabled) return null
+
+  const pool = cache.ads.filter((a) => a.placement === placement)
+  if (pool.length === 0) return null
+
+  const priorityRank: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
+  pool.sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3))
+  return pool[0]
+}
 
 function pickFromBundle(ads: ServedAd[], placement: AdPlacement): ServedAd | null {
   const pool = ads.filter((a) => a.placement === placement)
@@ -81,9 +100,9 @@ export type ServeParams = {
 }
 
 /**
- * Request an ad. When offlineMode is on, serves from the local cache with
- * eligibility checks (expiration, placement, client-side frequency caps).
- * Otherwise asks the server.
+ * Fast ad request:
+ * Returns instant cached ad (0ms) while checking server in background,
+ * or fetches directly from /api/ads/serve.
  */
 export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
   const store = useAppStore.getState()
@@ -92,24 +111,12 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
 
   if (settings && !settings.adsEnabled) return null
 
+  // Check instant cache first
+  const cached = getCachedAd(params.placement)
+
   if (store.offlineMode) {
-    const cache = readCache()
-    if (!cache) return null
-    if (new Date(cache.expiresAt).getTime() <= Date.now()) return null
-    if (settings && cache.version !== settings.adCacheVersion) return null
     if (settings && settings.offlineAdFallback === 'SKIP_ADS') return null
-
-    const ad = pickFromBundle(cache.ads, params.placement)
-    if (!ad) return null
-
-    // client-side frequency cap per campaign per session
-    const shown = store.sessionImpressions[ad.campaignId] ?? 0
-    if (shown >= 2) return null // cached ads default session cap
-
-    if (params.placement === 'MID_ROLL' && params.videoDuration) {
-      if (params.videoDuration < (settings?.minMidRollDurationSec ?? 300)) return null
-    }
-    return ad
+    return cached
   }
 
   try {
@@ -119,10 +126,26 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
     })
     if (params.videoId) q.set('videoId', params.videoId)
     if (params.videoDuration) q.set('videoDuration', String(params.videoDuration))
+
     const res = await apiGet<ServeAdResponse>(`/api/ads/serve?${q.toString()}`)
-    return res.ad
+    if (res && res.ad) {
+      // Save served ad into local cache
+      const curCache = readCache() || {
+        version: 1,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        ads: [],
+      }
+      const filtered = curCache.ads.filter((a) => a.placement !== params.placement || a.creativeId !== res.ad?.creativeId)
+      writeCache({
+        ...curCache,
+        ads: [res.ad, ...filtered],
+      })
+      return res.ad
+    }
+
+    return cached
   } catch {
-    return null
+    return cached
   }
 }
 

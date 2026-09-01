@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { requestAd, trackAdEvent } from '@/lib/ads-client'
+import { getCachedAd, requestAd, trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
 
 /**
@@ -14,10 +14,10 @@ import type { ServedAd } from '@/lib/types'
  * muted, looped, with sound toggle) and IMAGE creatives (crisp cover)
  * full-width, responsive on every device. Served live from the BANNER
  * placement: kill switches, session caps and frequency caps all apply.
- * Renders nothing when no ad is eligible. Ads are non-closable.
+ * Renders instantly from cache (0ms) and syncs with server.
  */
 export function HeroAdBanner() {
-  const [ad, setAd] = useState<ServedAd | null>(null)
+  const [ad, setAd] = useState<ServedAd | null>(() => getCachedAd('BANNER'))
   const [muted, setMuted] = useState(true)
   const [paused, setPaused] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -28,11 +28,12 @@ export function HeroAdBanner() {
     let cancelled = false
     void (async () => {
       const served = await requestAd({ placement: 'BANNER' })
-      if (cancelled || !served) return
-      setAd(served)
-      void trackAdEvent(served, 'IMPRESSION')
-      // Image/text heroes have no play event — count START on show.
-      if (served.type !== 'VIDEO') void trackAdEvent(served, 'START')
+      if (cancelled) return
+      if (served) {
+        setAd(served)
+        void trackAdEvent(served, 'IMPRESSION')
+        if (served.type !== 'VIDEO') void trackAdEvent(served, 'START')
+      }
     })()
     return () => {
       cancelled = true

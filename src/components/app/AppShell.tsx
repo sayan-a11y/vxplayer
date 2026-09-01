@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import { refreshAdCache } from '@/lib/ads-client'
 import { PICK_VIDEOS_EVENT, importVideoFiles, requestVideoPick } from '@/lib/import-client'
 import { useAppStore, type AppView } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -173,6 +174,7 @@ export function AppShell() {
 
   // "Scan device storage" opens the device video picker (gallery on Android).
   useEffect(() => {
+    void refreshAdCache()
     const open = () => fileInputRef.current?.click()
     window.addEventListener(PICK_VIDEOS_EVENT, open)
     return () => window.removeEventListener(PICK_VIDEOS_EVENT, open)

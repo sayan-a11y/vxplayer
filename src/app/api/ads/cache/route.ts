@@ -36,7 +36,8 @@ export async function GET() {
 
       const types = allowedCreativeTypes(placement)
       for (const campaign of campaigns) {
-        if (!campaign.placements.split(',').includes(placement)) continue
+        const list = (campaign.placements || '').split(',').map((p) => p.trim())
+        if (list.length > 0 && !list.includes(placement) && !list.includes('ALL')) continue
         for (const creative of campaign.creatives) {
           if (!types.includes(creative.type)) continue
           ads.push(toServedAd(campaign, creative, placement))
