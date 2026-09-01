@@ -70,6 +70,8 @@ export default function CreativesView() {
     }
   }
 
+  const [previewCreative, setPreviewCreative] = useState<CreativeRow | null>(null)
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -104,33 +106,40 @@ export default function CreativesView() {
                   <TableHead className="text-white/45">Skip</TableHead>
                   <TableHead className="text-white/45">Position</TableHead>
                   <TableHead className="text-white/45">Headline</TableHead>
-                  {canDelete && <TableHead className="text-white/45">Actions</TableHead>}
+                  <TableHead className="text-white/45">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {creatives.map((c) => (
                   <TableRow key={c.id} className="border-white/[0.06]">
                     <TableCell>
-                      {c.mediaUrl ? (
-                        c.type === 'VIDEO' ? (
-                          <video
-                            src={c.mediaUrl}
-                            muted
-                            preload="metadata"
-                            className="h-9 w-16 rounded-md border border-white/10 bg-black object-cover"
-                          />
+                      <button
+                        type="button"
+                        onClick={() => setPreviewCreative(c)}
+                        aria-label={`Preview media of ${c.name}`}
+                        className="transition hover:scale-105"
+                      >
+                        {c.mediaUrl ? (
+                          c.type === 'VIDEO' ? (
+                            <video
+                              src={c.mediaUrl}
+                              muted
+                              preload="metadata"
+                              className="h-9 w-16 rounded-md border border-white/10 bg-black object-cover"
+                            />
+                          ) : (
+                            <img
+                              src={c.mediaUrl}
+                              alt={`Preview of ${c.name}`}
+                              className="h-9 w-16 rounded-md border border-white/10 bg-black object-cover"
+                            />
+                          )
                         ) : (
-                          <img
-                            src={c.mediaUrl}
-                            alt={`Preview of ${c.name}`}
-                            className="h-9 w-16 rounded-md border border-white/10 bg-black object-cover"
-                          />
-                        )
-                      ) : (
-                        <div className="flex h-9 w-16 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.03] text-[10px] text-white/30">
-                          {c.type}
-                        </div>
-                      )}
+                          <div className="flex h-9 w-16 items-center justify-center rounded-md border border-white/[0.07] bg-white/[0.03] text-[10px] text-white/30">
+                            {c.type}
+                          </div>
+                        )}
+                      </button>
                     </TableCell>
                     <TableCell>
                       <p className="max-w-[180px] truncate text-sm font-medium text-white/85">{c.name}</p>
@@ -143,18 +152,28 @@ export default function CreativesView() {
                     <TableCell className="whitespace-nowrap text-white/70">{skipLabel(c.skipAfter)}</TableCell>
                     <TableCell className="text-white/60">{c.position ?? '—'}</TableCell>
                     <TableCell className="max-w-[200px] truncate text-white/60">{c.headline ?? '—'}</TableCell>
-                    {canDelete && (
-                      <TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setTarget(c)}
-                          aria-label={`Delete creative ${c.name}`}
-                          className="grid size-9 place-items-center rounded-lg border border-red-400/20 bg-red-400/10 text-red-300 transition hover:border-red-400/40 hover:bg-red-400/20 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+                          onClick={() => setPreviewCreative(c)}
+                          aria-label={`Preview creative ${c.name}`}
+                          className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/15 hover:text-white"
                         >
-                          <Trash2 className="size-4" />
+                          <ImagePlay className="size-3.5" />
                         </button>
-                      </TableCell>
-                    )}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setTarget(c)}
+                            aria-label={`Delete creative ${c.name}`}
+                            className="grid size-8 place-items-center rounded-lg border border-red-400/20 bg-red-400/10 text-red-300 transition hover:border-red-400/40 hover:bg-red-400/20 hover:text-red-200"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -162,6 +181,72 @@ export default function CreativesView() {
           </div>
         )}
       </div>
+
+      {/* Creative Full Preview Modal */}
+      <AlertDialog open={!!previewCreative} onOpenChange={(open) => !open && setPreviewCreative(null)}>
+        <AlertDialogContent className="max-w-lg border-white/10 bg-[#0c0d22] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-bold text-white">
+              {previewCreative?.name}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-white/50">
+              Campaign: {previewCreative?.campaignName ?? 'Unassigned'} · Type: {previewCreative?.type}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3">
+            <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/10 bg-black flex items-center justify-center">
+              {previewCreative?.mediaUrl ? (
+                previewCreative.type === 'VIDEO' ? (
+                  <video
+                    src={previewCreative.mediaUrl}
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    className="size-full object-contain"
+                  />
+                ) : (
+                  <img
+                    src={previewCreative.mediaUrl}
+                    alt={previewCreative.name}
+                    className="size-full object-contain"
+                  />
+                )
+              ) : (
+                <div className="p-4 text-center text-xs text-white/40">No media asset uploaded</div>
+              )}
+            </div>
+
+            <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/5 p-3 text-xs">
+              <div className="flex justify-between">
+                <span className="text-white/50">Headline:</span>
+                <span className="font-semibold text-white">{previewCreative?.headline || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/50">Body Text:</span>
+                <span className="text-white/80">{previewCreative?.bodyText || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/50">CTA:</span>
+                <span className="text-violet-300 font-medium">
+                  {previewCreative?.ctaText || 'Learn more'} ({previewCreative?.ctaUrl || '—'})
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/50">Duration & Skip:</span>
+                <span className="text-white/70">
+                  {formatDuration(previewCreative?.duration ?? 0)} · Skip: {skipLabel(previewCreative?.skipAfter ?? 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close Preview</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation */}
       <AlertDialog open={!!target} onOpenChange={(open) => !open && setTarget(null)}>

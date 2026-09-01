@@ -8,7 +8,21 @@ export const SETTINGS_ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN']
 export const CAMPAIGN_STATUSES = ['ACTIVE', 'PAUSED', 'EXPIRED', 'DRAFT']
 export const CAMPAIGN_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW']
 export const CREATIVE_TYPES = ['VIDEO', 'IMAGE', 'OVERLAY', 'BANNER', 'TEXT']
-export const ALL_PLACEMENTS = ['HERO', 'PRE_ROLL', 'MID_ROLL', 'POST_ROLL', 'OVERLAY', 'BANNER', 'FOOTER']
+export const ALL_PLACEMENTS = [
+  'HERO',
+  'PRE_ROLL',
+  'MID_ROLL',
+  'POST_ROLL',
+  'VIDEO_OVERLAY',
+  'IMAGE_OVERLAY',
+  'BANNER',
+  'FOOTER',
+  'HOME_FEED',
+  'BETWEEN_CARDS',
+  'UP_NEXT',
+  'PLAYER_BOTTOM',
+  'OVERLAY',
+]
 
 export function parsePlacementsCsv(csv: string): AdPlacement[] {
   return csv

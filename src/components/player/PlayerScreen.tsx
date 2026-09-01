@@ -34,6 +34,7 @@ import type { AspectMode, QualityVariantDTO, ServedAd } from '@/lib/types'
 import AdOverlay, { type AdPhase } from './AdOverlay'
 import GestureLayer from './GestureLayer'
 import OverlayAd from './OverlayAd'
+import { PlayerBottomAd } from './PlayerBottomAd'
 import PlayerControls from './PlayerControls'
 import SubtitleRenderer, { type SubtitleSize } from './SubtitleRenderer'
 
@@ -470,20 +471,36 @@ export default function PlayerScreen() {
     }
   }, [startupGate, activeAd, videoId])
 
-  // ── OVERLAY ad: once per video, 20s after main playback starts
+  // ── OVERLAY ads (VIDEO_OVERLAY / IMAGE_OVERLAY / OVERLAY): once per video, 20s after main playback starts
   useEffect(() => {
     if (!videoId || !mainStarted) return
     const t = window.setTimeout(() => {
       if (overlayShownRef.current || adRef.current) return
       overlayShownRef.current = true
-      requestAd({ placement: 'OVERLAY', videoId })
-        .then((a) => {
-          if (a) {
-            void trackAdEvent(a, 'IMPRESSION', videoId)
-            setOverlayAd(a)
-          }
-        })
-        .catch(() => {})
+      const instant =
+        getCachedAd('VIDEO_OVERLAY') ||
+        getCachedAd('IMAGE_OVERLAY') ||
+        getCachedAd('OVERLAY')
+      if (instant) {
+        void trackAdEvent(instant, 'IMPRESSION', videoId)
+        setOverlayAd(instant)
+      } else {
+        requestAd({ placement: 'VIDEO_OVERLAY', videoId })
+          .then((a) => {
+            if (a) {
+              void trackAdEvent(a, 'IMPRESSION', videoId)
+              setOverlayAd(a)
+            } else {
+              requestAd({ placement: 'IMAGE_OVERLAY', videoId }).then((img) => {
+                if (img) {
+                  void trackAdEvent(img, 'IMPRESSION', videoId)
+                  setOverlayAd(img)
+                }
+              })
+            }
+          })
+          .catch(() => {})
+      }
     }, 20000)
     return () => window.clearTimeout(t)
   }, [mainStarted, videoId])
@@ -1224,6 +1241,15 @@ export default function PlayerScreen() {
           />
         )}
       </AnimatePresence>
+
+      {/* Player Bottom Ad slot (positioned non-intrusively below player controls in non-fullscreen) */}
+      {!isFullscreen && !activeAd && !locked && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
+          <div className="pointer-events-auto">
+            <PlayerBottomAd videoId={video.id} />
+          </div>
+        </div>
+      )}
 
       {/* Error panel */}
       {error && !activeAd && (

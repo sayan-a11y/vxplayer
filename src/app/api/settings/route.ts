@@ -13,15 +13,22 @@ async function getSettingsRow(): Promise<AppSettings> {
 }
 
 function toSettingsDTO(s: AppSettings): SettingsDTO {
+  const custom = s as unknown as Record<string, unknown>
   return {
     adsEnabled: s.adsEnabled,
-    heroEnabled: (s as any).heroEnabled ?? true,
+    heroEnabled: (custom.heroEnabled as boolean | undefined) ?? true,
     preRollEnabled: s.preRollEnabled,
     midRollEnabled: s.midRollEnabled,
     postRollEnabled: s.postRollEnabled,
+    videoOverlayEnabled: (custom.videoOverlayEnabled as boolean | undefined) ?? s.overlayEnabled ?? true,
+    imageOverlayEnabled: (custom.imageOverlayEnabled as boolean | undefined) ?? s.overlayEnabled ?? true,
     overlayEnabled: s.overlayEnabled,
     bannerEnabled: s.bannerEnabled,
-    footerEnabled: (s as any).footerEnabled ?? true,
+    footerEnabled: (custom.footerEnabled as boolean | undefined) ?? true,
+    homeFeedEnabled: (custom.homeFeedEnabled as boolean | undefined) ?? true,
+    betweenCardsEnabled: (custom.betweenCardsEnabled as boolean | undefined) ?? true,
+    upNextEnabled: (custom.upNextEnabled as boolean | undefined) ?? true,
+    playerBottomEnabled: (custom.playerBottomEnabled as boolean | undefined) ?? true,
     adsPerSession: s.adsPerSession,
     maxMidRolls: s.maxMidRolls,
     overlayPerHour: s.overlayPerHour,

@@ -94,7 +94,21 @@ export function preloadNextAds(): void {
   const now = Date.now()
 
   // Preload top 1 creative for each placement
-  const placements: AdPlacement[] = ['HERO', 'PRE_ROLL', 'MID_ROLL', 'POST_ROLL', 'OVERLAY', 'BANNER', 'FOOTER']
+  const placements: AdPlacement[] = [
+    'HERO',
+    'PRE_ROLL',
+    'MID_ROLL',
+    'POST_ROLL',
+    'VIDEO_OVERLAY',
+    'IMAGE_OVERLAY',
+    'BANNER',
+    'FOOTER',
+    'HOME_FEED',
+    'BETWEEN_CARDS',
+    'UP_NEXT',
+    'PLAYER_BOTTOM',
+    'OVERLAY',
+  ]
   for (const p of placements) {
     const candidate = manifest.ads.find(
       (a) => a.placement === p && new Date(a.expiresAt).getTime() > now && !!a.mediaUrl
@@ -130,9 +144,15 @@ export function selectAdFromManifest(
     PRE_ROLL: settings.preRollEnabled ?? true,
     MID_ROLL: settings.midRollEnabled ?? true,
     POST_ROLL: settings.postRollEnabled ?? true,
+    VIDEO_OVERLAY: settings.videoOverlayEnabled ?? settings.overlayEnabled ?? true,
+    IMAGE_OVERLAY: settings.imageOverlayEnabled ?? settings.overlayEnabled ?? true,
     OVERLAY: settings.overlayEnabled ?? true,
     BANNER: settings.bannerEnabled ?? true,
     FOOTER: settings.footerEnabled ?? true,
+    HOME_FEED: settings.homeFeedEnabled ?? true,
+    BETWEEN_CARDS: settings.betweenCardsEnabled ?? true,
+    UP_NEXT: settings.upNextEnabled ?? true,
+    PLAYER_BOTTOM: settings.playerBottomEnabled ?? true,
   }
   if (!placementEnabledMap[placement]) return null
 

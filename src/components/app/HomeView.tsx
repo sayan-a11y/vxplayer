@@ -28,7 +28,9 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
 import { BannerAd } from './BannerAd'
+import { BetweenCardsAd } from './BetweenCardsAd'
 import { HeroAdBanner } from './HeroAdBanner'
+import { HomeFeedAd } from './HomeFeedAd'
 import { VideoCard } from './VideoCard'
 
 const byRecentAdded = (a: VideoDTO, b: VideoDTO) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
@@ -244,7 +246,10 @@ export function HomeView() {
         </Section>
       )}
 
-      {/* 3. Recently Added */}
+      {/* 3. In-feed Section Ad */}
+      <HomeFeedAd />
+
+      {/* 4. Recently Added */}
       <Section
         title="Recently Added"
         icon={Sparkles}
@@ -260,7 +265,7 @@ export function HomeView() {
         </Scroller>
       </Section>
 
-      {/* 4. Playlists */}
+      {/* 5. Playlists */}
       {playlists.length > 0 && (
         <Section title="Playlists" icon={ListVideo} onSeeAll={() => setView('playlists')}>
           <Scroller>
@@ -282,16 +287,20 @@ export function HomeView() {
         </Section>
       )}
 
-      {/* 5. All Videos */}
+      {/* 6. All Videos with Between-Cards Ad */}
       <Section title="All Videos" icon={Film} onSeeAll={() => setView('videos')}>
         <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {videos.slice(0, 12).map((v) => (
-            <VideoCard key={v.id} video={v} queue={videos.slice(0, 12)} />
+          {videos.slice(0, 4).map((v) => (
+            <VideoCard key={v.id} video={v} queue={videos} />
+          ))}
+          {videos.length >= 2 && <BetweenCardsAd />}
+          {videos.slice(4, 12).map((v) => (
+            <VideoCard key={v.id} video={v} queue={videos} />
           ))}
         </div>
       </Section>
 
-      {/* 6. Dedicated Banner Ad slot */}
+      {/* 7. Dedicated Banner Ad slot */}
       <BannerAd />
     </div>
   )

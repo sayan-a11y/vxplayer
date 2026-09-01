@@ -41,10 +41,16 @@ export async function ensureSchema(): Promise<void> {
   if (globalForPrisma.schemaInitialized) return
 
   try {
-    // 1. Ensure AppSettings singleton exists
+    // 1. Ensure AppSettings singleton exists & all placement columns exist
     await db.$executeRawUnsafe(`
       ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "heroEnabled" BOOLEAN DEFAULT true;
       ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "footerEnabled" BOOLEAN DEFAULT true;
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "videoOverlayEnabled" BOOLEAN DEFAULT true;
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "imageOverlayEnabled" BOOLEAN DEFAULT true;
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "homeFeedEnabled" BOOLEAN DEFAULT true;
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "betweenCardsEnabled" BOOLEAN DEFAULT true;
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "upNextEnabled" BOOLEAN DEFAULT true;
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "playerBottomEnabled" BOOLEAN DEFAULT true;
     `).catch(() => {})
 
     const settings = await db.appSettings.findFirst().catch(() => null)

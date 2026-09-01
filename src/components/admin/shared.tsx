@@ -262,13 +262,19 @@ export function actionMeta(action: string): { icon: LucideIcon; className: strin
 // ── Placements / utils ──────────────────────────────────────────────────────
 
 export const PLACEMENT_LABELS: Record<AdPlacement, string> = {
-  HERO: 'Hero',
+  HERO: 'Hero Ad',
   PRE_ROLL: 'Pre-Roll',
   MID_ROLL: 'Mid-Roll',
   POST_ROLL: 'Post-Roll',
-  OVERLAY: 'Overlay',
+  VIDEO_OVERLAY: 'Video Overlay',
+  IMAGE_OVERLAY: 'Image Overlay',
   BANNER: 'Banner',
-  FOOTER: 'Footer',
+  FOOTER: 'Footer Ad',
+  HOME_FEED: 'Home Feed Ad',
+  BETWEEN_CARDS: 'Between Video Cards',
+  UP_NEXT: 'Up Next Ad',
+  PLAYER_BOTTOM: 'Player Bottom Ad',
+  OVERLAY: 'Overlay',
 }
 
 export const ALL_PLACEMENTS: AdPlacement[] = [
@@ -276,9 +282,14 @@ export const ALL_PLACEMENTS: AdPlacement[] = [
   'PRE_ROLL',
   'MID_ROLL',
   'POST_ROLL',
-  'OVERLAY',
+  'VIDEO_OVERLAY',
+  'IMAGE_OVERLAY',
   'BANNER',
   'FOOTER',
+  'HOME_FEED',
+  'BETWEEN_CARDS',
+  'UP_NEXT',
+  'PLAYER_BOTTOM',
 ]
 
 /** '2026-01-05' | ISO → '05 Jan' */

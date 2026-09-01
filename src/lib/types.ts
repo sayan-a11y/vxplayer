@@ -58,9 +58,15 @@ export type AdPlacement =
   | 'PRE_ROLL'
   | 'MID_ROLL'
   | 'POST_ROLL'
-  | 'OVERLAY'
+  | 'VIDEO_OVERLAY'
+  | 'IMAGE_OVERLAY'
   | 'BANNER'
   | 'FOOTER'
+  | 'HOME_FEED'
+  | 'BETWEEN_CARDS'
+  | 'UP_NEXT'
+  | 'PLAYER_BOTTOM'
+  | 'OVERLAY'
 
 export type ServedAd = {
   campaignId: string
@@ -106,9 +112,15 @@ export type SettingsDTO = {
   preRollEnabled: boolean
   midRollEnabled: boolean
   postRollEnabled: boolean
+  videoOverlayEnabled?: boolean
+  imageOverlayEnabled?: boolean
   overlayEnabled: boolean
   bannerEnabled: boolean
   footerEnabled?: boolean
+  homeFeedEnabled?: boolean
+  betweenCardsEnabled?: boolean
+  upNextEnabled?: boolean
+  playerBottomEnabled?: boolean
   adsPerSession: number
   maxMidRolls: number
   overlayPerHour: number

@@ -88,7 +88,11 @@ export async function GET(req: Request) {
       .filter((c) => {
         if (!c.placements || c.placements.trim() === '') return true
         const list = c.placements.split(',').map((p) => p.trim().toUpperCase())
-        return list.includes(placement.toUpperCase()) || list.includes('ALL')
+        if (list.includes('ALL')) return true
+        if (list.includes(placement.toUpperCase())) return true
+        if ((placement === 'VIDEO_OVERLAY' || placement === 'IMAGE_OVERLAY') && list.includes('OVERLAY')) return true
+        if (placement === 'OVERLAY' && (list.includes('VIDEO_OVERLAY') || list.includes('IMAGE_OVERLAY'))) return true
+        return false
       })
       .sort((a, b) => {
         const diff = byPriorityDesc(a, b)
@@ -103,13 +107,7 @@ export async function GET(req: Request) {
 
       const matching = campaign.creatives.filter((c) => {
         const t = (c.type || '').toUpperCase()
-        return (
-          types.includes(t) ||
-          (placement === 'HERO' && (t === 'VIDEO' || t === 'IMAGE' || t === 'BANNER' || t === 'TEXT')) ||
-          (placement === 'PRE_ROLL' && t === 'VIDEO') ||
-          (placement === 'BANNER' && (t === 'BANNER' || t === 'IMAGE' || t === 'TEXT' || t === 'VIDEO')) ||
-          (placement === 'FOOTER' && (t === 'IMAGE' || t === 'BANNER' || t === 'TEXT' || t === 'OVERLAY' || t === 'VIDEO'))
-        )
+        return types.includes(t)
       })
 
       const pool = matching.length > 0 ? matching : campaign.creatives
