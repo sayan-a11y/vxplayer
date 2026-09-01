@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { requireAuth } from '@/lib/admin-auth'
 import {
   ALL_PLACEMENTS,

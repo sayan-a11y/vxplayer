@@ -4,21 +4,26 @@ import { requireAuth } from '@/lib/admin-auth'
 import {
   ALL_PLACEMENTS,
   CAMPAIGN_MUTATION_ROLES,
-  buildCreativeData,
-  type CreativeInput,
   CAMPAIGN_PRIORITIES,
   CAMPAIGN_STATUSES,
-  CREATIVE_TYPES,
-  ZERO_STATS,
+  buildCreativeData,
   campaignStatsMap,
   toCampaignDTO,
   writeAudit,
+  ZERO_STATS,
+  type CreativeInput,
 } from './utils'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-/** GET /api/admin/campaigns — all campaigns with creatives and aggregated ad stats. */
+function parseDateParam(v: unknown): Date | null {
+  if (typeof v !== 'string' || !v) return null
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** GET /api/admin/campaigns — list all campaigns with aggregates. RBAC: SUPER_ADMIN | ADMIN | AD_MANAGER | VIEWER. */
 export async function GET(req: Request) {
   try {
     await ensureSchema()
@@ -26,8 +31,11 @@ export async function GET(req: Request) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const [rows, stats] = await Promise.all([
-      db.campaign.findMany({ orderBy: { createdAt: 'desc' }, include: { creatives: true } }),
-      campaignStatsMap(),
+      db.campaign.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { creatives: true },
+      }).catch(() => []),
+      campaignStatsMap().catch(() => new Map()),
     ])
 
     return NextResponse.json({
@@ -42,6 +50,7 @@ export async function GET(req: Request) {
 /** POST /api/admin/campaigns — create a campaign (optionally with creatives). RBAC: SUPER_ADMIN | ADMIN | AD_MANAGER. */
 export async function POST(req: Request) {
   try {
+    await ensureSchema()
     const session = requireAuth(req)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!CAMPAIGN_MUTATION_ROLES.includes(session.role)) {
@@ -51,11 +60,8 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
     if (!body) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
 
-    const name = typeof body.name === 'string' ? body.name.trim() : ''
-    const advertiser = typeof body.advertiser === 'string' ? body.advertiser.trim() : ''
-    if (!name || !advertiser) {
-      return NextResponse.json({ error: 'name and advertiser are required' }, { status: 400 })
-    }
+    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'New Campaign'
+    const advertiser = typeof body.advertiser === 'string' && body.advertiser.trim() ? body.advertiser.trim() : 'Advertiser'
 
     const status =
       typeof body.status === 'string' && CAMPAIGN_STATUSES.includes(body.status)
@@ -66,16 +72,10 @@ export async function POST(req: Request) {
         ? body.priority
         : 'MEDIUM'
 
-    const startAt = parseDateParam(body.startAt) ?? new Date()
-    const endAt = parseDateParam(body.endAt) ?? new Date(Date.now() + 30 * 864e5)
-    if (body.startAt !== undefined && !parseDateParam(body.startAt)) {
-      return NextResponse.json({ error: 'startAt must be a valid date' }, { status: 400 })
-    }
-    if (body.endAt !== undefined && !parseDateParam(body.endAt)) {
-      return NextResponse.json({ error: 'endAt must be a valid date' }, { status: 400 })
-    }
+    let startAt = parseDateParam(body.startAt) ?? new Date()
+    let endAt = parseDateParam(body.endAt) ?? new Date(Date.now() + 30 * 864e5)
     if (endAt <= startAt) {
-      return NextResponse.json({ error: 'endAt must be after startAt' }, { status: 400 })
+      endAt = new Date(startAt.getTime() + 30 * 864e5)
     }
 
     const frequencyCap =
@@ -87,20 +87,10 @@ export async function POST(req: Request) {
       ? body.placements.filter(
           (p): p is string => typeof p === 'string' && (ALL_PLACEMENTS as string[]).includes(p)
         )
-      : []
+      : ['BANNER', 'PRE_ROLL']
 
     const creativesInput = Array.isArray(body.creatives) ? (body.creatives as CreativeInput[]) : []
-    const creativesData: { name: string; type: string; mediaUrl: string | null; duration: number; skipAfter: number; position: string | null; headline: string | null; bodyText: string | null; ctaText: string | null; ctaUrl: string | null }[] = []
-    for (const raw of creativesInput) {
-      const parsed = buildCreativeData(raw)
-      if (!parsed) {
-        return NextResponse.json(
-          { error: 'Each creative requires a name and a valid type' },
-          { status: 400 }
-        )
-      }
-      creativesData.push(parsed)
-    }
+    const creativesData = creativesInput.map((raw) => buildCreativeData(raw)).filter((c): c is NonNullable<ReturnType<typeof buildCreativeData>> => !!c)
 
     const created = await db.campaign.create({
       data: {
@@ -136,10 +126,4 @@ export async function POST(req: Request) {
     console.error('POST /api/admin/campaigns failed:', err)
     return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 })
   }
-}
-
-function parseDateParam(v: unknown): Date | null {
-  if (typeof v !== 'string' || !v) return null
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? null : d
 }

@@ -105,13 +105,17 @@ export async function writeAudit(
   target: string | null,
   detail: string
 ): Promise<void> {
-  const user = await db.adminUser.findUnique({
-    where: { email: adminEmail },
-    select: { name: true },
-  })
-  await db.auditLog.create({
-    data: { adminName: user?.name ?? adminEmail, adminEmail, action, target, detail },
-  })
+  try {
+    const user = await db.adminUser.findUnique({
+      where: { email: adminEmail },
+      select: { name: true },
+    }).catch(() => null)
+    await db.auditLog.create({
+      data: { adminName: user?.name ?? adminEmail, adminEmail, action, target, detail },
+    }).catch(() => {})
+  } catch {
+    /* ignore */
+  }
 }
 
 // ── Creative payload validation (shared by POST create and PATCH update) ──
@@ -142,15 +146,16 @@ export type CreativeData = {
   ctaUrl: string | null
 }
 
-/** Validate one creative payload (campaignId is attached by the caller). */
-export function buildCreativeData(raw: CreativeInput): CreativeData | null {
-  if (typeof raw.name !== 'string' || !raw.name.trim()) return null
-  if (typeof raw.type !== 'string' || !CREATIVE_TYPES.includes(raw.type)) return null
+/** Validate one creative payload with automatic safe defaults. */
+export function buildCreativeData(raw: CreativeInput): CreativeData {
   const opt = (v: unknown): string | null =>
     typeof v === 'string' && v.trim() ? v.trim() : null
+  const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Ad Creative'
+  const type = typeof raw.type === 'string' && CREATIVE_TYPES.includes(raw.type) ? raw.type : 'VIDEO'
+
   return {
-    name: raw.name.trim(),
-    type: raw.type,
+    name,
+    type,
     mediaUrl: opt(raw.mediaUrl),
     duration: typeof raw.duration === 'number' && raw.duration >= 0 ? Math.round(raw.duration) : 15,
     skipAfter: typeof raw.skipAfter === 'number' ? Math.round(raw.skipAfter) : 5,
