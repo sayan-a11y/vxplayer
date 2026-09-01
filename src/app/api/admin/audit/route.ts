@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { requireAuth } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +8,7 @@ export const runtime = 'nodejs'
 /** GET /api/admin/audit?limit=100 — latest audit log entries, newest first. */
 export async function GET(req: Request) {
   try {
+    await ensureSchema()
     const session = requireAuth(req)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
     const logs = await db.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
       take: limit,
-    })
+    }).catch(() => [])
 
     return NextResponse.json({
       logs: logs.map((l) => ({

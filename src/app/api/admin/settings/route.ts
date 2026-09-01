@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import type { AppSettings } from '@prisma/client'
 import { requireAuth } from '@/lib/admin-auth'
 import type { SettingsDTO } from '@/lib/types'
@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 async function getSettingsRow(): Promise<AppSettings> {
-  const existing = await db.appSettings.findUnique({ where: { id: 'singleton' } })
+  await ensureSchema()
+  const existing = await db.appSettings.findUnique({ where: { id: 'singleton' } }).catch(() => null)
   if (existing) return existing
   return db.appSettings.create({ data: { id: 'singleton' } })
 }

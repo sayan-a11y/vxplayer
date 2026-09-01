@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { requireAuth } from '@/lib/admin-auth'
 import type { ReportsDTO } from '@/lib/types'
 
@@ -9,6 +9,7 @@ export const runtime = 'nodejs'
 /** GET /api/admin/reports?days=7|30 — summary report over a 7- or 30-day window. */
 export async function GET(req: Request) {
   try {
+    await ensureSchema()
     const session = requireAuth(req)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -20,13 +21,13 @@ export async function GET(req: Request) {
     since.setHours(0, 0, 0, 0)
 
     const [stats, eventGroups, campaigns] = await Promise.all([
-      db.dailyStat.findMany({ where: { date: { gte: since } }, orderBy: { date: 'asc' } }),
+      db.dailyStat.findMany({ where: { date: { gte: since } }, orderBy: { date: 'asc' } }).catch(() => []),
       db.adEvent.groupBy({
         by: ['campaignId', 'eventType'],
         where: { createdAt: { gte: since } },
         _count: { _all: true },
-      }),
-      db.campaign.findMany({ select: { id: true, name: true, advertiser: true } }),
+      }).catch(() => []),
+      db.campaign.findMany({ select: { id: true, name: true, advertiser: true } }).catch(() => []),
     ])
 
     const sum = (pick: (s: (typeof stats)[number]) => number) =>
@@ -56,6 +57,7 @@ export async function GET(req: Request) {
       { impressions: number; completions: number; skips: number; starts: number }
     >()
     for (const g of eventGroups) {
+      if (!g.campaignId) continue
       const entry =
         perCampaign.get(g.campaignId) ?? { impressions: 0, completions: 0, skips: 0, starts: 0 }
       if (g.eventType === 'IMPRESSION') entry.impressions += g._count._all

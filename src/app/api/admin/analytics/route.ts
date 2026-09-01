@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { requireAuth } from '@/lib/admin-auth'
 import type { AnalyticsDTO } from '@/lib/types'
 
@@ -18,16 +18,17 @@ const FUNNEL_STEPS: { key: string; label: string }[] = [
 /** GET /api/admin/analytics — ad event totals, funnel, daily trend, placement & campaign splits. */
 export async function GET(req: Request) {
   try {
+    await ensureSchema()
     const session = requireAuth(req)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const [eventGroups, placementGroups, campaignGroups, campaigns, dailyStats] =
       await Promise.all([
-        db.adEvent.groupBy({ by: ['eventType'], _count: { _all: true } }),
-        db.adEvent.groupBy({ by: ['placement', 'eventType'], _count: { _all: true } }),
-        db.adEvent.groupBy({ by: ['campaignId', 'eventType'], _count: { _all: true } }),
-        db.campaign.findMany({ select: { id: true, name: true } }),
-        db.dailyStat.findMany({ orderBy: { date: 'asc' } }),
+        db.adEvent.groupBy({ by: ['eventType'], _count: { _all: true } }).catch(() => []),
+        db.adEvent.groupBy({ by: ['placement', 'eventType'], _count: { _all: true } }).catch(() => []),
+        db.adEvent.groupBy({ by: ['campaignId', 'eventType'], _count: { _all: true } }).catch(() => []),
+        db.campaign.findMany({ select: { id: true, name: true } }).catch(() => []),
+        db.dailyStat.findMany({ orderBy: { date: 'asc' } }).catch(() => []),
       ])
 
     // ── Totals across all events ──
