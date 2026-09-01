@@ -1,16 +1,13 @@
 'use client'
 
 /**
- * Device video import — lets users pick videos from their phone/desktop
- * storage (gallery on Android) and upload them into the library with
- * real per-file progress. Uploads run sequentially to keep mobile
- * networks happy, and the tray UI lives in the zustand store.
+ * VLC-style private device video import.
+ * Videos picked from the user's phone/desktop storage are processed and stored
+ * locally in IndexedDB with instant 0-second playback and remain 100% private.
  */
 import { toast } from 'sonner'
-
-import { fastUploadFile } from '@/lib/fast-upload-client'
+import { saveLocalVideo } from '@/lib/local-media-db'
 import { useAppStore, type UploadTask } from '@/lib/store'
-import type { VideoDTO } from '@/lib/types'
 
 /** Custom event AppShell listens on to open its hidden <input type="file">. */
 export const PICK_VIDEOS_EVENT = 'vx:pick-videos'
@@ -20,21 +17,7 @@ export function requestVideoPick() {
   window.dispatchEvent(new CustomEvent(PICK_VIDEOS_EVENT))
 }
 
-type UploadResponse = { video: VideoDTO; duplicate: boolean }
-
-/**
- * Upload one file through the fast engine (single-shot streaming for
- * small files, parallel chunked upload with retries for big ones).
- */
-async function uploadOne(file: File, onProgress: (pct: number) => void): Promise<UploadResponse> {
-  const body = (await fastUploadFile({ file, kind: 'video', onProgress })) as UploadResponse & {
-    error?: string
-  }
-  if (!body.video) throw new Error(body.error || 'Import failed')
-  return body
-}
-
-/** Import the selected files one-by-one with live progress in the tray. */
+/** Import selected device videos locally with instant 0-second loading. */
 export async function importVideoFiles(files: File[]) {
   const videos = Array.from(files).filter(
     (f) => f.size > 0 || /video\//.test(f.type) || /\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|mts|flv)$/i.test(f.name),
@@ -45,27 +28,21 @@ export async function importVideoFiles(files: File[]) {
   }
 
   let added = 0
-  let failed = 0
 
   for (const file of videos) {
     const id = crypto.randomUUID()
-    const base: UploadTask = { id, name: file.name, pct: 0, status: 'uploading' }
+    const base: UploadTask = { id, name: file.name, pct: 40, status: 'uploading' }
     useAppStore.getState().upsertUpload(base)
+
     try {
-      const res = await uploadOne(file, (pct) => {
-        useAppStore.getState().upsertUpload({
-          id,
-          name: file.name,
-          pct,
-          status: pct >= 100 ? 'processing' : 'uploading',
-        })
-      })
-      added += res.duplicate ? 0 : 1
-      useAppStore.getState().bumpData()
+      useAppStore.getState().upsertUpload({ id, name: file.name, pct: 85, status: 'processing' })
+      await saveLocalVideo(file)
+      added += 1
+
       useAppStore.getState().upsertUpload({ id, name: file.name, pct: 100, status: 'done' })
-      window.setTimeout(() => useAppStore.getState().removeUpload(id), 2200)
+      useAppStore.getState().bumpData()
+      window.setTimeout(() => useAppStore.getState().removeUpload(id), 1500)
     } catch (err) {
-      failed += 1
       useAppStore.getState().upsertUpload({
         id,
         name: file.name,
@@ -73,15 +50,11 @@ export async function importVideoFiles(files: File[]) {
         status: 'error',
         error: err instanceof Error ? err.message : 'Import failed',
       })
-      window.setTimeout(() => useAppStore.getState().removeUpload(id), 6000)
+      window.setTimeout(() => useAppStore.getState().removeUpload(id), 4000)
     }
   }
 
-  if (added > 0 && failed === 0) {
-    toast.success(`Added ${added} video${added === 1 ? '' : 's'} to your library`)
-  } else if (added > 0 && failed > 0) {
-    toast.warning(`Added ${added} video${added === 1 ? '' : 's'} · ${failed} failed`)
-  } else if (failed > 0) {
-    toast.error(`Couldn't import ${failed} video${failed === 1 ? '' : 's'}`)
+  if (added > 0) {
+    toast.success(`Added ${added} video${added === 1 ? '' : 's'} to your private library`)
   }
 }

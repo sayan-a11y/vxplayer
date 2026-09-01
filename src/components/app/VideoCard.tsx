@@ -74,7 +74,12 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
     if (deleteBusy) return
     setDeleteBusy(true)
     try {
-      await apiDelete(`/api/videos/${video.id}`)
+      if (video.id.startsWith('local_')) {
+        const { deleteLocalVideo } = await import('@/lib/local-media-db')
+        await deleteLocalVideo(video.id)
+      } else {
+        await apiDelete(`/api/videos/${video.id}`)
+      }
       // Close the player if this exact video is on screen.
       if (useAppStore.getState().playerVideo?.id === video.id) {
         useAppStore.getState().closePlayer()
@@ -105,14 +110,18 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
         className="cursor-pointer rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60"
       >
         <div className="relative aspect-video overflow-hidden rounded-xl border border-white/5 bg-white/5">
-          <Image
-            src={video.thumbnailUrl}
-            alt={video.title}
-            fill
-            loading="lazy"
-            sizes={variant === 'wide' ? '176px' : '(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw'}
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-          />
+          {video.thumbnailUrl ? (
+            <img
+              src={video.thumbnailUrl}
+              alt={video.title}
+              loading="lazy"
+              className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            />
+          ) : (
+            <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-purple-950/40 via-black to-slate-900">
+              <Play className="size-8 text-white/30" />
+            </div>
+          )}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/20" />
 
           <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/90 backdrop-blur-sm">

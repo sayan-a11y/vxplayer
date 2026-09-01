@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { apiGet } from '@/lib/api'
 import { formatDuration } from '@/lib/format'
 import { requestVideoPick } from '@/lib/import-client'
+import { getLocalVideos } from '@/lib/local-media-db'
 import { useAppStore } from '@/lib/store'
 import type { PlaylistDTO, VideoDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -141,11 +142,14 @@ export function HomeView() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const [vRes, pRes] = await Promise.all([
+      const [vRes, pRes, localVids] = await Promise.all([
         apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
         apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists').catch(() => ({ playlists: [] })),
+        getLocalVideos().catch(() => []),
       ])
-      setVideos(vRes?.videos ?? [])
+      const cloud = vRes?.videos ?? []
+      const local = localVids ?? []
+      setVideos([...local, ...cloud])
       setPlaylists(pRes?.playlists ?? [])
     } catch {
       setVideos([])

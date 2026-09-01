@@ -28,6 +28,8 @@ export function sortVideos(list: VideoDTO[], sort: LibrarySort): VideoDTO[] {
   return arr.sort((a, b) => b.sizeMB - a.sizeMB)
 }
 
+import { getLocalVideos } from '@/lib/local-media-db'
+
 /** Shared videos fetch — refetches when the global dataVersion bumps. */
 export function useVideos() {
   const dataVersion = useAppStore((s) => s.dataVersion)
@@ -37,8 +39,13 @@ export function useVideos() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const res = await apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] }))
-      setVideos(res?.videos ?? [])
+      const [cloudRes, localVids] = await Promise.all([
+        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
+        getLocalVideos().catch(() => []),
+      ])
+      const cloud = cloudRes?.videos ?? []
+      const local = localVids ?? []
+      setVideos([...local, ...cloud])
     } catch {
       setVideos([])
     }
