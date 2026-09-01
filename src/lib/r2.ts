@@ -145,6 +145,45 @@ export async function uploadFileToR2(
 }
 
 /**
+ * Generate a pre-signed PUT URL for direct browser-to-Cloudflare R2 uploads.
+ * This completely bypasses Vercel/serverless body size limits and timeouts.
+ */
+export async function createR2PresignedUpload(
+  key: string,
+  contentType?: string,
+  expiresIn = 3600
+): Promise<{ uploadUrl: string; publicUrl: string; key: string } | null> {
+  const client = getR2Client()
+  const config = getR2Config()
+  if (!client || !config) return null
+
+  const resolvedContentType = contentType || getMimeType(key)
+
+  try {
+    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner')
+    const command = new PutObjectCommand({
+      Bucket: config.bucketName,
+      Key: key,
+      ContentType: resolvedContentType,
+    })
+
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn })
+    const publicUrl = config.publicUrl
+      ? `${config.publicUrl}/${key}`
+      : `https://${config.bucketName}.${config.accountId}.r2.cloudflarestorage.com/${key}`
+
+    return {
+      uploadUrl,
+      publicUrl,
+      key,
+    }
+  } catch (err) {
+    console.error('Failed to generate R2 presigned URL:', err)
+    return null
+  }
+}
+
+/**
  * Delete a file from Cloudflare R2.
  */
 export async function deleteFileFromR2(key: string): Promise<boolean> {

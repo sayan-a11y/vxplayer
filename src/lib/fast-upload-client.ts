@@ -72,12 +72,55 @@ export async function fastUploadFile({
   token,
   onProgress,
 }: FastUploadOptions): Promise<FastUploadResult> {
+  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mkv|mov|m4v|3gp|avi)$/i.test(file.name)
+  const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|svg)$/i.test(file.name)
+
+  // ── 1. Fast Direct Cloudflare R2 Presigned Upload (Bypasses all serverless limits) ──
+  if (kind === 'creative' && token) {
+    try {
+      const presignRes = await fetch('/api/admin/r2/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({
+          name: file.name,
+          type: file.type || (isVideo ? 'video/mp4' : 'image/png'),
+          folder: 'ads',
+        }),
+      })
+
+      if (presignRes.ok) {
+        const presignData = (await presignRes.json()) as { uploadUrl?: string; publicUrl?: string }
+        if (presignData.uploadUrl && presignData.publicUrl) {
+          const res = await xhrSend(
+            'PUT',
+            presignData.uploadUrl,
+            file,
+            { 'Content-Type': file.type || 'application/octet-stream' },
+            (loaded) => onProgress?.(Math.min(99, Math.round((loaded / file.size) * 100)))
+          )
+
+          if (res.status >= 200 && res.status < 300) {
+            onProgress?.(100)
+            return {
+              url: presignData.publicUrl,
+              kind: isVideo ? 'video' : 'image',
+              fileName: file.name,
+              sizeMB: Math.max(1, Math.round(file.size / (1024 * 1024))),
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Direct R2 presigned upload failed, falling back to server route:', e)
+    }
+  }
+
   const headers = {
     'Content-Type': file.type || 'application/octet-stream',
     ...authHeaders(token),
   }
 
-  // ── small files: single request is the fastest path ──
+  // ── 2. Small files: single request streaming route ──
   if (file.size <= SMALL_FILE_BYTES) {
     const compat = kind === 'video' ? '/api/videos/upload' : '/api/admin/creatives/upload'
     const res = await xhrSend(
@@ -95,7 +138,7 @@ export async function fastUploadFile({
     throw new Error((body.error as string) || `Upload failed (${res.status})`)
   }
 
-  // ── big files: parallel chunked upload ──
+  // ── 3. Big files: parallel chunked upload fallback ──
   const initRes = await fetch('/api/uploads/init', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
