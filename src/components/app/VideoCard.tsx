@@ -61,7 +61,8 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
     if (favBusy) return
     setFavBusy(true)
     try {
-      await apiPost(`/api/videos/${video.id}/favorite`, { favorite: !video.favorite })
+      const { toggleLocalFavorite } = await import('@/lib/privateLibrary')
+      await toggleLocalFavorite(video.id, !video.favorite)
       toast.success(video.favorite ? 'Removed from favorites' : 'Added to favorites')
       bumpData()
     } catch {
@@ -75,12 +76,8 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
     if (deleteBusy) return
     setDeleteBusy(true)
     try {
-      if (video.id.startsWith('local_')) {
-        const { deleteLocalVideo } = await import('@/lib/privateLibrary')
-        await deleteLocalVideo(video.id)
-      } else {
-        await apiDelete(`/api/videos/${video.id}`)
-      }
+      const { deleteLocalVideo } = await import('@/lib/privateLibrary')
+      await deleteLocalVideo(video.id)
       // Close the player if this exact video is on screen.
       if (useAppStore.getState().playerVideo?.id === video.id) {
         useAppStore.getState().closePlayer()

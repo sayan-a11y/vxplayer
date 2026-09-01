@@ -6,8 +6,12 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, ChevronRight, ListVideo, Loader2, Play, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { apiDelete, apiGet, apiPost } from '@/lib/api'
 import { formatDuration } from '@/lib/format'
+import {
+  createLocalPlaylist,
+  deleteLocalPlaylist,
+  getLocalPlaylists,
+} from '@/lib/privateLibrary'
 import { useAppStore } from '@/lib/store'
 import type { PlaylistDTO, VideoDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -72,12 +76,11 @@ export function PlaylistsView() {
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-
   const load = useCallback(async () => {
     setError(false)
     try {
-      const res = await apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists').catch(() => ({ playlists: [] }))
-      setPlaylists(res?.playlists ?? [])
+      const list = await getLocalPlaylists()
+      setPlaylists(list)
     } catch {
       setPlaylists([])
     }
@@ -94,7 +97,7 @@ export function PlaylistsView() {
     if (!name || creating) return
     setCreating(true)
     try {
-      await apiPost('/api/playlists', { name })
+      await createLocalPlaylist(name)
       toast.success(`Playlist “${name}” created`)
       setCreateOpen(false)
       setNewName('')
@@ -110,7 +113,7 @@ export function PlaylistsView() {
     if (!confirmDeleteId) return
     const target = playlists?.find((p) => p.id === confirmDeleteId)
     try {
-      await apiDelete(`/api/playlists/${confirmDeleteId}`)
+      await deleteLocalPlaylist(confirmDeleteId)
       toast.success(`Playlist “${target?.name ?? 'playlist'}” deleted`)
       if (selectedId === confirmDeleteId) setSelectedId(null)
       setConfirmDeleteId(null)
@@ -122,7 +125,7 @@ export function PlaylistsView() {
 
   async function handleRemoveVideo(playlistId: string, videoId: string) {
     try {
-      await apiDelete(`/api/playlists/${playlistId}/items?videoId=${encodeURIComponent(videoId)}`)
+      const { deleteLocalPlaylist, getLocalPlaylists } = await import('@/lib/privateLibrary')
       toast.success('Removed from playlist')
       bumpData()
     } catch {

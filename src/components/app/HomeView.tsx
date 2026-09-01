@@ -142,15 +142,13 @@ export function HomeView() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const [vRes, pRes, localVids] = await Promise.all([
-        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
-        apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists').catch(() => ({ playlists: [] })),
+      const { getLocalVideos, getLocalPlaylists } = await import('@/lib/privateLibrary')
+      const [localVids, localPls] = await Promise.all([
         getLocalVideos().catch(() => []),
+        getLocalPlaylists().catch(() => []),
       ])
-      const cloud = vRes?.videos ?? []
-      const local = localVids ?? []
-      setVideos([...local, ...cloud])
-      setPlaylists(pRes?.playlists ?? [])
+      setVideos(localVids ?? [])
+      setPlaylists(localPls ?? [])
     } catch {
       setVideos([])
       setPlaylists([])

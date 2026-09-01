@@ -30,7 +30,7 @@ export function sortVideos(list: VideoDTO[], sort: LibrarySort): VideoDTO[] {
 
 import { getLocalVideos } from '@/lib/privateLibrary'
 
-/** Shared videos fetch — refetches when the global dataVersion bumps. */
+/** Device-local videos fetch — refetches when the global dataVersion bumps. */
 export function useVideos() {
   const dataVersion = useAppStore((s) => s.dataVersion)
   const [videos, setVideos] = useState<VideoDTO[] | null>(null)
@@ -39,13 +39,8 @@ export function useVideos() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const [cloudRes, localVids] = await Promise.all([
-        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
-        getLocalVideos().catch(() => []),
-      ])
-      const cloud = cloudRes?.videos ?? []
-      const local = localVids ?? []
-      setVideos([...local, ...cloud])
+      const local = await getLocalVideos().catch(() => [])
+      setVideos(local)
     } catch {
       setVideos([])
     }

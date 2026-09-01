@@ -185,10 +185,11 @@ export function SettingsView() {
   // Unique library folders for the hidden-folder chips (fetched once, non-critical).
   useEffect(() => {
     let cancelled = false
-    void apiGet<{ videos: VideoDTO[] }>('/api/videos')
-      .then((res) => {
+    void import('@/lib/privateLibrary')
+      .then((mod) => mod.getLocalVideos())
+      .then((vids) => {
         if (cancelled) return
-        setFolders(Array.from(new Set(res.videos.map((v) => v.folder))).sort((a, b) => a.localeCompare(b)))
+        setFolders(Array.from(new Set(vids.map((v) => v.folder))).sort((a, b) => a.localeCompare(b)))
       })
       .catch(() => {
         /* non-critical */
@@ -230,7 +231,8 @@ export function SettingsView() {
 
   async function handleClearHistory() {
     try {
-      await apiDelete('/api/history')
+      const { clearLocalHistory } = await import('@/lib/privateLibrary')
+      await clearLocalHistory()
       toast.success('History cleared')
       bumpData()
     } catch {

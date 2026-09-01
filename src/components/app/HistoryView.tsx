@@ -27,6 +27,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 import { EmptyState, ErrorState } from './VideosView'
 
+import { clearLocalHistory, getLocalHistory } from '@/lib/privateLibrary'
+
 export function HistoryView() {
   const dataVersion = useAppStore((s) => s.dataVersion)
   const bumpData = useAppStore((s) => s.bumpData)
@@ -39,11 +41,11 @@ export function HistoryView() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const res = await apiGet<{ history: HistoryDTO[] }>('/api/history')
-      setHistory(res.history ?? [])
+      const list = await getLocalHistory()
+      setHistory(list)
     } catch {
       setError(true)
-      toast.error('Could not load history')
+      setHistory([])
     }
   }, [])
 
@@ -55,7 +57,7 @@ export function HistoryView() {
     if (clearing) return
     setClearing(true)
     try {
-      await apiDelete('/api/history')
+      await clearLocalHistory()
       toast.success('History cleared')
       bumpData()
     } catch {

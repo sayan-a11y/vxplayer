@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
 import { requestAd, trackAdEvent } from '@/lib/ads-client'
+import { saveLocalHistory } from '@/lib/privateLibrary'
 import { apiPost } from '@/lib/api'
 import { generateDemoCues } from '@/lib/vtt'
 import { formatDuration } from '@/lib/format'
@@ -430,15 +431,9 @@ export default function PlayerScreen() {
     }
 
     return () => {
-      // fire-and-forget progress save for the video being left
       const p = positionRef.current
       if (p && p.id === videoId) {
-        void apiPost('/api/history', {
-          videoId: p.id,
-          position: Math.floor(p.time),
-          duration: Math.floor(p.dur || 0),
-          sessionId: useAppStore.getState().sessionId || undefined,
-        }).catch(() => {})
+        void saveLocalHistory(p.id, Math.floor(p.time), Math.floor(p.dur || 0))
       }
     }
   }, [videoId])
@@ -667,12 +662,7 @@ export default function PlayerScreen() {
     const d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : video.duration
     const pos = Math.floor(v.currentTime || 0)
     positionRef.current = { id: video.id, time: pos, dur: d }
-    void apiPost('/api/history', {
-      videoId: video.id,
-      position: pos,
-      duration: Math.floor(d || 0),
-      sessionId: useAppStore.getState().sessionId || undefined,
-    }).catch(() => {})
+    void saveLocalHistory(video.id, pos, Math.floor(d || 0))
   }
 
   const updateBuffered = () => {

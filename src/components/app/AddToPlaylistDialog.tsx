@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react'
 import { Check, ListVideo, Loader2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { apiGet, apiPost } from '@/lib/api'
+import {
+  addVideoToLocalPlaylist,
+  createLocalPlaylist,
+  getLocalPlaylists,
+} from '@/lib/privateLibrary'
 import { useAppStore } from '@/lib/store'
 import type { PlaylistDTO, VideoDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -39,14 +43,13 @@ export function AddToPlaylistDialog({ video, open, onOpenChange }: AddToPlaylist
     setChecked([])
     setNewName('')
     setShowCreate(false)
-    setPlaylists(null)
+
     void (async () => {
       try {
-        const res = await apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists')
-        setPlaylists(res.playlists ?? [])
+        const list = await getLocalPlaylists()
+        setPlaylists(list)
       } catch {
         setPlaylists([])
-        toast.error('Could not load playlists')
       }
     })()
   }, [open])
@@ -64,12 +67,12 @@ export function AddToPlaylistDialog({ video, open, onOpenChange }: AddToPlaylist
     try {
       let createdName: string | null = null
       if (name) {
-        const res = await apiPost<{ playlist: PlaylistDTO }>('/api/playlists', { name })
-        createdName = res.playlist.name
-        await apiPost(`/api/playlists/${res.playlist.id}/items`, { videoId: video.id })
+        const created = await createLocalPlaylist(name)
+        createdName = created.name
+        await addVideoToLocalPlaylist(created.id, video.id)
       }
       for (const p of targets) {
-        await apiPost(`/api/playlists/${p.id}/items`, { videoId: video.id })
+        await addVideoToLocalPlaylist(p.id, video.id)
       }
       const names = [...targets.map((t) => t.name), ...(createdName ? [createdName] : [])]
       toast.success(names.length === 1 ? `Added to ${names[0]}` : `Added to ${names.length} playlists`)
