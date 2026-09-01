@@ -72,7 +72,12 @@ export default function AdOverlay({ ad, phase, videoId, onComplete }: AdOverlayP
       const v = videoRef.current
       if (!erroredRef.current && ad.mediaUrl && v && v.duration > 0 && v.readyState >= 1) {
         setElapsed(v.currentTime)
-        if (v.paused && !completedRef.current) void v.play().catch(() => {})
+        if (v.paused && !completedRef.current) {
+          const p = v.play()
+          if (p !== undefined && typeof p.catch === 'function') {
+            p.catch(() => {})
+          }
+        }
       } else {
         setElapsed((Date.now() - startedAt) / 1000)
       }

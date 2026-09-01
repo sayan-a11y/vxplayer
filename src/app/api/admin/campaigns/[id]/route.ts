@@ -154,6 +154,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const fields = Object.keys(data)
       detail = fields.length > 0 ? `Updated fields: ${fields.join(', ')}` : 'No fields changed'
     }
+    await db.appSettings
+      .update({
+        where: { id: 'singleton' },
+        data: { adCacheVersion: { increment: 1 } },
+      })
+      .catch(() => {})
+
     await writeAudit(session.email, action, updated.name, detail)
 
     const stats = await campaignStatsMap()
@@ -180,6 +187,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if (!existing) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
 
     await db.campaign.delete({ where: { id } })
+
+    await db.appSettings
+      .update({
+        where: { id: 'singleton' },
+        data: { adCacheVersion: { increment: 1 } },
+      })
+      .catch(() => {})
+
     await writeAudit(
       session.email,
       'CAMPAIGN_DELETED',

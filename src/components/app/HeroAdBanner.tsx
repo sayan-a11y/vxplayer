@@ -70,10 +70,15 @@ export function HeroAdBanner() {
     const v = videoRef.current
     if (!v) return
     if (v.paused) {
-      void v.play()
+      const p = v.play()
+      if (p !== undefined) {
+        p.catch(() => {})
+      }
       setPaused(false)
     } else {
-      v.pause()
+      try {
+        v.pause()
+      } catch {}
       setPaused(true)
     }
   }

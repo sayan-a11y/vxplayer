@@ -221,7 +221,12 @@ export default function CampaignsView() {
             : c,
         ),
       }))
-      toast.success(`Media uploaded${body.kind === 'video' && body.duration ? ` · ${body.duration}s detected` : ''}`)
+      const isR2 = body.url.startsWith('http://') || body.url.startsWith('https://')
+      toast.success(
+        `Media uploaded${isR2 ? ' to Cloudflare R2' : ''}${
+          body.kind === 'video' && body.duration ? ` · ${body.duration}s detected` : ''
+        }`
+      )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed')
     } finally {

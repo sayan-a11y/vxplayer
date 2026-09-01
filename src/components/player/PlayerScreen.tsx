@@ -316,10 +316,15 @@ export default function PlayerScreen() {
     if (!v) return
     if (v.paused) {
       userPausedRef.current = false
-      void v.play().catch(() => {})
+      const p = v.play()
+      if (p !== undefined && typeof p.catch === 'function') {
+        p.catch(() => {})
+      }
     } else {
       userPausedRef.current = true
-      v.pause()
+      try {
+        v.pause()
+      } catch {}
     }
   }, [])
 
@@ -444,12 +449,18 @@ export default function PlayerScreen() {
     const v = videoRef.current
     if (!v) return
     if (startupGate || activeAd) {
-      if (!v.paused) v.pause()
+      if (!v.paused) {
+        try {
+          v.pause()
+        } catch {}
+      }
       return
     }
     if (userPausedRef.current || v.ended) return
     const p = v.play()
-    if (p && typeof p.catch === 'function') p.catch(() => {})
+    if (p !== undefined && typeof p.catch === 'function') {
+      p.catch(() => {})
+    }
   }, [startupGate, activeAd, videoId])
 
   // ── OVERLAY ad: once per video, 20s after main playback starts
@@ -710,7 +721,10 @@ export default function PlayerScreen() {
         v.currentTime = seek.t
         setCurrentTime(seek.t)
       }
-      if (seek.wasPlaying) void v.play().catch(() => {})
+      if (seek.wasPlaying) {
+        const p = v.play()
+        if (p !== undefined && typeof p.catch === 'function') p.catch(() => {})
+      }
     }
     if (resumeAppliedRef.current !== video.id) {
       resumeAppliedRef.current = video.id
@@ -848,7 +862,10 @@ export default function PlayerScreen() {
     endedRef.current = false
     setWaiting(true)
     v.load()
-    if (!userPausedRef.current) void v.play().catch(() => {})
+    if (!userPausedRef.current) {
+      const p = v.play()
+      if (p !== undefined && typeof p.catch === 'function') p.catch(() => {})
+    }
   }
 
   const toggleMute = () => {

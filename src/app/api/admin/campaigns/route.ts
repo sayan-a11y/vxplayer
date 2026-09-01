@@ -116,6 +116,13 @@ export async function POST(req: Request) {
       include: { creatives: true },
     })
 
+    await db.appSettings
+      .update({
+        where: { id: 'singleton' },
+        data: { adCacheVersion: { increment: 1 } },
+      })
+      .catch(() => {})
+
     await writeAudit(
       session.email,
       'CAMPAIGN_CREATED',

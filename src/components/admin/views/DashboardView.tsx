@@ -28,6 +28,7 @@ import {
   Megaphone,
   Play,
   PlayCircle,
+  RefreshCw,
   ScrollText,
   SkipForward,
   UserCheck,
@@ -35,6 +36,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { formatCompact, formatDateTime } from '@/lib/format'
 import type { DashboardDTO } from '@/lib/types'
 import { adminGet } from '../session'
@@ -71,23 +73,42 @@ const CARDS: { key: keyof DashboardDTO['cards']; label: string; icon: LucideIcon
 export default function DashboardView() {
   const [data, setData] = useState<DashboardDTO | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true)
+    else setRefreshing(true)
     setError(null)
     try {
-      setData(await adminGet<DashboardDTO>('/api/admin/dashboard'))
+      const res = await adminGet<DashboardDTO>('/api/admin/dashboard')
+      setData(res)
+      setLastUpdated(new Date())
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load dashboard')
+      if (!isBackground) {
+        setError(e instanceof Error ? e.message : 'Failed to load dashboard')
+      }
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [])
 
+  // Initial load
   useEffect(() => {
     void load()
   }, [load])
+
+  // Real-time polling (every 3.5 seconds)
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = window.setInterval(() => {
+      void load(true)
+    }, 3500)
+    return () => window.clearInterval(interval)
+  }, [autoRefresh, load])
 
   if (loading) {
     return (
@@ -109,21 +130,53 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-6">
-      {/* Real-data notice */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className="vx-chip border-emerald-400/30 bg-emerald-400/10 text-[11px] font-semibold text-emerald-300"
-          role="status"
-        >
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+      {/* Real-data notice & live controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`vx-chip border-emerald-400/30 bg-emerald-400/10 text-[11px] font-semibold text-emerald-300 ${
+              refreshing ? 'animate-pulse' : ''
+            }`}
+            role="status"
+          >
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+            </span>
+            {autoRefresh ? 'REAL-TIME LIVE' : 'LIVE (PAUSED)'}
           </span>
-          Live data
-        </span>
-        <p className="text-xs text-white/45">
-          All metrics are computed in real time from actual playback and ad events — no estimates.
-        </p>
+          <p className="text-xs text-white/45">
+            Auto-syncing actual playback, ad events & user sessions.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-white/40">
+            Updated {lastUpdated.toLocaleTimeString()}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAutoRefresh((prev) => !prev)}
+            className={`h-7 px-2.5 text-xs font-medium ${
+              autoRefresh
+                ? 'border-violet-500/30 bg-violet-500/10 text-violet-300'
+                : 'border-white/10 bg-white/[0.04] text-white/60'
+            }`}
+          >
+            {autoRefresh ? 'Auto 3.5s (ON)' : 'Auto (PAUSED)'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            onClick={() => void load(true)}
+            className="h-7 px-2 border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10 hover:text-white"
+            title="Refresh now"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
 
       {/* Stat cards */}

@@ -86,7 +86,10 @@ export async function GET(req: Request) {
 
     const candidates = campaigns
       .filter((c) => c.placements.split(',').includes(placement))
-      .sort(byPriorityDesc)
+      .sort((a, b) => {
+        const diff = byPriorityDesc(a, b)
+        return diff !== 0 ? diff : Math.random() - 0.5
+      })
 
     const types = allowedCreativeTypes(placement)
 
@@ -108,10 +111,28 @@ export async function GET(req: Request) {
       if (matching.length === 0) continue
 
       const creative = matching[Math.floor(Math.random() * matching.length)]
-      return NextResponse.json({ ad: toServedAd(campaign, creative, placement) })
+      return NextResponse.json(
+        { ad: toServedAd(campaign, creative, placement) },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            Pragma: 'no-cache',
+            Expires: '0',
+          },
+        }
+      )
     }
 
-    return NextResponse.json({ ad: null })
+    return NextResponse.json(
+      { ad: null },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      }
+    )
   } catch (err) {
     console.error('GET /api/ads/serve failed:', err)
     return NextResponse.json({ error: 'Ad serving failed' }, { status: 500 })

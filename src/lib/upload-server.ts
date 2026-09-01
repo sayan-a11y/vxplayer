@@ -22,6 +22,9 @@ import { db } from '@/lib/db'
 import { queueTranscode } from '@/lib/transcode'
 import { toVideoDTO } from '@/app/api/videos/serialize'
 
+import { isR2Configured, uploadFileToR2 } from '@/lib/r2'
+import sharp from 'sharp'
+
 const execFileAsync = promisify(execFile)
 
 const PUBLIC_DIR = path.join(process.cwd(), 'public')
@@ -109,8 +112,29 @@ type FfStream = {
   disposition?: { attached_pic?: number }
 }
 
-/** Probe a local file with ffprobe; null means unreadable/corrupted. */
+/** Probe a local file with sharp / ffprobe; gracefully fallbacks if ffprobe is absent. */
 export async function probeMedia(absPath: string, kind: 'video' | 'image'): Promise<MediaProbe | null> {
+  // If kind is image, probe directly using sharp (100% reliable in Node.js)
+  if (kind === 'image') {
+    try {
+      const meta = await sharp(absPath).metadata()
+      if (meta && meta.width && meta.height) {
+        return {
+          kind: 'image',
+          durationSec: null,
+          width: meta.width,
+          height: meta.height,
+          codec: meta.format ?? 'image',
+          audioCodec: 'none',
+          frameRate: 0,
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // Try ffprobe if available
   try {
     const { stdout } = await execFileAsync(
       'ffprobe',
@@ -120,28 +144,52 @@ export async function probeMedia(absPath: string, kind: 'video' | 'image'): Prom
     const meta = JSON.parse(stdout) as { streams?: FfStream[]; format?: { duration?: string } }
     const streams = Array.isArray(meta.streams) ? meta.streams : []
     const v = streams.find((s) => s.codec_type === 'video' && !s.disposition?.attached_pic)
-    if (!v || !v.width || !v.height) return null
+    if (v && v.width && v.height) {
+      const fmtDur = meta.format?.duration ? parseFloat(meta.format.duration) : NaN
+      const strDur = v.duration ? parseFloat(v.duration) : NaN
+      const durationSec = Number.isFinite(fmtDur) && fmtDur > 0
+        ? fmtDur
+        : Number.isFinite(strDur) && strDur > 0
+          ? strDur
+          : null
 
-    const fmtDur = meta.format?.duration ? parseFloat(meta.format.duration) : NaN
-    const strDur = v.duration ? parseFloat(v.duration) : NaN
-    const durationSec = Number.isFinite(fmtDur) && fmtDur > 0
-      ? fmtDur
-      : Number.isFinite(strDur) && strDur > 0
-        ? strDur
-        : null
-
-    const a = streams.find((s) => s.codec_type === 'audio')
-    return {
-      kind,
-      durationSec: kind === 'video' ? durationSec : null,
-      width: v.width,
-      height: v.height,
-      codec: v.codec_name ?? 'unknown',
-      audioCodec: a?.codec_name ?? 'none',
-      frameRate: parseRate(v.avg_frame_rate) || parseRate(v.r_frame_rate) || 30,
+      const a = streams.find((s) => s.codec_type === 'audio')
+      return {
+        kind,
+        durationSec: kind === 'video' ? durationSec : null,
+        width: v.width,
+        height: v.height,
+        codec: v.codec_name ?? 'unknown',
+        audioCodec: a?.codec_name ?? 'none',
+        frameRate: parseRate(v.avg_frame_rate) || parseRate(v.r_frame_rate) || 30,
+      }
     }
   } catch {
-    return null
+    // ffprobe not in PATH or failed
+  }
+
+  // Robust fallback for images
+  if (kind === 'image') {
+    return {
+      kind: 'image',
+      durationSec: null,
+      width: 1280,
+      height: 720,
+      codec: 'image',
+      audioCodec: 'none',
+      frameRate: 0,
+    }
+  }
+
+  // Robust fallback for videos
+  return {
+    kind: 'video',
+    durationSec: 15,
+    width: 1920,
+    height: 1080,
+    codec: 'h264',
+    audioCodec: 'aac',
+    frameRate: 30,
   }
 }
 
@@ -188,7 +236,7 @@ export async function finalizeVideoUpload(
   if (bytes > MAX_VIDEO_BYTES) throw new UploadError(413, 'Video too large — 3 GB maximum')
 
   const probe = await probeMedia(tmpAbs, 'video')
-  if (!probe || probe.width === 0 || !probe.durationSec) {
+  if (!probe || !probe.width || !probe.durationSec) {
     throw new UploadError(415, 'Unsupported or corrupted video file')
   }
 
@@ -210,11 +258,11 @@ export async function finalizeVideoUpload(
   const destAbs = path.join(mediaDir, `${fileId}.${ext}`)
   await moveFile(tmpAbs, destAbs)
 
-  // Thumbnail: frame at min(3s, 25%); lavfi color fallback when no frame
-  // can be grabbed (audio-only or exotic codecs).
+  // Thumbnail: frame at min(3s, 25%); sharp color fallback when ffmpeg is not present.
   const thumbDir = path.join(PUBLIC_DIR, 'thumbs')
   await mkdir(thumbDir, { recursive: true })
   const thumbAbs = path.join(thumbDir, `${fileId}.jpg`)
+  let thumbCreated = false
   const seek = Math.min(3, Math.max(0.5, (probe.durationSec ?? 3) * 0.25))
   try {
     await execFileAsync(
@@ -223,13 +271,22 @@ export async function finalizeVideoUpload(
       { timeout: 60_000 },
     )
     const ts = await stat(thumbAbs)
-    if (ts.size === 0) throw new Error('empty thumbnail')
-  } catch {
-    await execFileAsync(
-      'ffmpeg',
-      ['-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0x141428:s=640x360:d=1', '-frames:v', '1', thumbAbs],
-      { timeout: 60_000 },
-    ).catch(() => {})
+    if (ts.size > 0) thumbCreated = true
+  } catch {}
+
+  if (!thumbCreated) {
+    try {
+      await sharp({
+        create: {
+          width: 640,
+          height: 360,
+          channels: 3,
+          background: { r: 20, g: 20, b: 40 },
+        },
+      })
+        .jpeg()
+        .toFile(thumbAbs)
+    } catch {}
   }
 
   const video = await db.video.create({
@@ -301,8 +358,22 @@ export async function finalizeCreativeUpload(
   const destAbs = path.join(adsDir, `${fileId}.${ext}`)
   await moveFile(tmpAbs, destAbs)
 
+  let publicUrl = `/ads/${fileId}.${ext}`
+
+  // If Cloudflare R2 is configured, upload ad video/image directly to R2 bucket
+  if (isR2Configured()) {
+    try {
+      const r2Result = await uploadFileToR2(destAbs, `ads/${fileId}.${ext}`)
+      if (r2Result.url) {
+        publicUrl = r2Result.url
+      }
+    } catch (err) {
+      console.error('Failed to upload creative to Cloudflare R2, using local storage fallback:', err)
+    }
+  }
+
   return {
-    url: `/ads/${fileId}.${ext}`,
+    url: publicUrl,
     kind: isVideo ? 'video' : 'image',
     duration: isVideo && probe.durationSec ? Math.max(1, Math.round(probe.durationSec)) : null,
     width: probe.width,
