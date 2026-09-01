@@ -14,6 +14,7 @@ import {
   MoreHorizontal,
   MoreVertical,
   PlaySquare,
+  Plus,
   Search,
   Settings2,
   type LucideIcon,
@@ -231,7 +232,18 @@ export function AppShell() {
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              onClick={() => requestVideoPick()}
+              size="sm"
+              className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
+              aria-label="Add videos from device"
+            >
+              <Plus className="size-3.5" />
+              <span className="hidden sm:inline">+ Add Video</span>
+              <span className="sm:hidden">+ Video</span>
+            </Button>
+
             <button
               type="button"
               onClick={() => setView('search')}

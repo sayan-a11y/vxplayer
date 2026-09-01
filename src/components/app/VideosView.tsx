@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowLeft, FolderOpen, FolderSearch, RefreshCw, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, FolderOpen, FolderSearch, Plus, RefreshCw, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { apiGet } from '@/lib/api'
@@ -179,14 +179,25 @@ export function VideosView() {
             <h1 className="text-lg font-semibold tracking-tight">All Videos</h1>
             <span className="vx-chip tabular-nums">{visible.length}</span>
           </div>
-          <Button
-            onClick={() => void handleAddFolder()}
-            size="sm"
-            className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
-          >
-            <FolderSearch className="size-3.5" />
-            + Scan Device
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => requestVideoPick()}
+              size="sm"
+              className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
+            >
+              <Plus className="size-3.5" />
+              + Add Video
+            </Button>
+            <Button
+              onClick={() => void handleAddFolder()}
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
+            >
+              <FolderSearch className="size-3.5" />
+              + Folder
+            </Button>
+          </div>
         </div>
       )}
 
@@ -197,17 +208,27 @@ export function VideosView() {
           hint={
             activeFolder
               ? 'This folder has no playable videos yet.'
-              : 'Scan videos from this device’s storage to start watching.'
+              : 'Add videos or folders from this device’s storage to start watching.'
           }
           action={
             !activeFolder && (
-              <Button
-                onClick={() => void handleAddFolder()}
-                className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
-              >
-                <FolderSearch className="size-4" />
-                + Add Folder / Scan Device
-              </Button>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
+                <Button
+                  onClick={() => requestVideoPick()}
+                  className="vx-btn-accent min-h-11 gap-2 rounded-xl px-5 font-semibold"
+                >
+                  <Plus className="size-4" />
+                  + Add Single / Multi Videos
+                </Button>
+                <Button
+                  onClick={() => void handleAddFolder()}
+                  variant="outline"
+                  className="min-h-11 gap-2 rounded-xl px-5 font-semibold"
+                >
+                  <FolderSearch className="size-4" />
+                  + Add Entire Folder
+                </Button>
+              </div>
             )
           }
         />

@@ -10,6 +10,7 @@ import {
   FolderSearch,
   History,
   ListVideo,
+  Plus,
   RefreshCw,
   Sparkles,
   type LucideIcon,
@@ -193,13 +194,23 @@ export function HomeView() {
           <p className="max-w-xs text-sm text-muted-foreground">
             Scan or add videos from this device's storage to start watching.
           </p>
-          <Button
-            onClick={() => void handleAddFolder()}
-            className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
-          >
-            <FolderSearch className="size-4" />
-            + Add Folder / Scan Device
-          </Button>
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
+            <Button
+              onClick={() => requestVideoPick()}
+              className="vx-btn-accent min-h-11 gap-2 rounded-xl px-5 font-semibold"
+            >
+              <Plus className="size-4" />
+              + Add Single / Multi Videos
+            </Button>
+            <Button
+              onClick={() => void handleAddFolder()}
+              variant="outline"
+              className="min-h-11 gap-2 rounded-xl px-5 font-semibold"
+            >
+              <FolderSearch className="size-4" />
+              + Add Entire Folder
+            </Button>
+          </div>
         </div>
       </div>
     )
