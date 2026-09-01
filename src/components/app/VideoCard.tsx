@@ -48,6 +48,7 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
   const [infoOpen, setInfoOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [imgError, setImgError] = useState(false)
 
   const watched = video.history?.watchedPct ?? 0
   const showProgress = video.history !== null && watched > 0 && watched < 95
@@ -109,13 +110,22 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
         }}
         className="cursor-pointer rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60"
       >
-        <div className="relative aspect-video overflow-hidden rounded-xl border border-white/5 bg-white/5">
-          {video.thumbnailUrl ? (
+        <div className="relative aspect-video overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br from-purple-950/40 via-black to-slate-900">
+          {!imgError && video.thumbnailUrl && !video.thumbnailUrl.startsWith('/thumbs/') ? (
             <img
               src={video.thumbnailUrl}
               alt={video.title}
               loading="lazy"
+              onError={() => setImgError(true)}
               className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            />
+          ) : video.srcUrl ? (
+            <video
+              src={`${video.srcUrl}#t=0.5`}
+              preload="metadata"
+              muted
+              playsInline
+              className="pointer-events-none absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
             />
           ) : (
             <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-purple-950/40 via-black to-slate-900">
