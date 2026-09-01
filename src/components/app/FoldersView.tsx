@@ -68,25 +68,48 @@ export function FoldersView() {
 
   const folders = buildFolders(videos.filter((v) => !hiddenFolders.includes(v.folder)))
 
+  async function handleAddFolder() {
+    try {
+      const { scanDeviceDirectory } = await import('@/lib/privateLibrary')
+      const count = await scanDeviceDirectory()
+      if (count > 0) {
+        useAppStore.getState().bumpData()
+        toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
+      }
+    } catch {
+      requestVideoPick()
+    }
+  }
+
   return (
     <div className="px-4 py-4 md:px-6">
       <div className="mb-4 flex min-h-11 items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">Folders</h1>
-        <span className="vx-chip tabular-nums">{folders.length}</span>
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-lg font-semibold tracking-tight">Folders</h1>
+          <span className="vx-chip tabular-nums">{folders.length}</span>
+        </div>
+        <Button
+          onClick={() => void handleAddFolder()}
+          size="sm"
+          className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
+        >
+          <FolderSearch className="size-3.5" />
+          + Add Folder
+        </Button>
       </div>
 
       {folders.length === 0 ? (
         <EmptyState
           icon={FolderOpen}
           title="No folders found"
-          hint="Import videos from this device's storage to build your library."
+          hint="Scan videos from this device's storage to build your library."
           action={
             <Button
-              onClick={() => requestVideoPick()}
+              onClick={() => void handleAddFolder()}
               className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
             >
               <FolderSearch className="size-4" />
-              Scan device storage
+              + Add Folder / Scan Device
             </Button>
           }
         />
@@ -102,14 +125,22 @@ export function FoldersView() {
             >
               <div className="mb-3 grid h-24 grid-cols-3 gap-0.5 overflow-hidden rounded-xl border border-white/5 bg-white/5">
                 {f.thumbs.map((v) => (
-                  <div key={v.id} className="relative">
-                    <Image
-                      src={v.thumbnailUrl}
-                      alt={v.title}
-                      fill
-                      sizes="120px"
-                      className="object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
+                  <div key={v.id} className="relative bg-gradient-to-br from-purple-950/30 via-black to-slate-900">
+                    {v.thumbnailUrl ? (
+                      <img
+                        src={v.thumbnailUrl}
+                        alt={v.title}
+                        className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : v.srcUrl ? (
+                      <video
+                        src={`${v.srcUrl}#t=0.5`}
+                        preload="metadata"
+                        muted
+                        playsInline
+                        className="pointer-events-none size-full object-cover"
+                      />
+                    ) : null}
                   </div>
                 ))}
               </div>

@@ -120,14 +120,25 @@ export function extractLocalVideoMetadata(file: File): Promise<{
 }
 
 /**
- * Save a device video to the private local library.
+ * Save a device video to the private local library with optional real folder categorization.
  */
-export async function saveLocalVideo(file: File): Promise<VideoDTO> {
+export async function saveLocalVideo(file: File, folderName?: string): Promise<VideoDTO> {
   const id = `local_${crypto.randomUUID()}`
   const meta = await extractLocalVideoMetadata(file)
   const ext = file.name.lastIndexOf('.') >= 0 ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase() : 'mp4'
   const title = file.name.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim() || 'Untitled Video'
   const sizeMB = Math.max(1, Math.round(file.size / (1024 * 1024)))
+
+  // Determine folder name (Camera, Download, Movies, Screen Recordings, or passed folder)
+  let folder = folderName || 'Device Storage'
+  if (!folderName) {
+    const lower = file.name.toLowerCase()
+    if (/dcim|camera|vid_\d|p_v_|img_/i.test(lower)) folder = 'Camera'
+    else if (/download|dl_|down/i.test(lower)) folder = 'Download'
+    else if (/whatsapp|wa_/i.test(lower)) folder = 'WhatsApp Video'
+    else if (/screen|rec|capture/i.test(lower)) folder = 'Screen Recordings'
+    else if (/movie|film|trailer/i.test(lower)) folder = 'Movies'
+  }
 
   // Active runtime object URL
   const srcUrl = URL.createObjectURL(file)
@@ -137,7 +148,7 @@ export async function saveLocalVideo(file: File): Promise<VideoDTO> {
     id,
     title,
     fileName: file.name,
-    folder: 'Device Storage',
+    folder,
     duration: meta.duration,
     width: meta.width,
     height: meta.height,
@@ -174,6 +185,36 @@ export async function saveLocalVideo(file: File): Promise<VideoDTO> {
   }
 
   return videoDto
+}
+
+/**
+ * Scan a directory using modern File System Access API (Android/Chrome/Edge).
+ */
+export async function scanDeviceDirectory(): Promise<number> {
+  if (typeof window === 'undefined' || !('showDirectoryPicker' in window)) {
+    throw new Error('Directory picker not supported')
+  }
+
+  // @ts-expect-error - showDirectoryPicker is standard in modern browsers
+  const dirHandle = await window.showDirectoryPicker({ mode: 'read' })
+  let count = 0
+
+  async function processEntries(handle: any, folderName: string) {
+    for await (const entry of handle.values()) {
+      if (entry.kind === 'file') {
+        if (/\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|flv)$/i.test(entry.name)) {
+          const file = await entry.getFile()
+          await saveLocalVideo(file, folderName)
+          count += 1
+        }
+      } else if (entry.kind === 'directory') {
+        await processEntries(entry, entry.name)
+      }
+    }
+  }
+
+  await processEntries(dirHandle, dirHandle.name || 'Device Videos')
+  return count
 }
 
 /**

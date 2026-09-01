@@ -145,6 +145,19 @@ export function VideosView() {
     )
   }
 
+  async function handleAddFolder() {
+    try {
+      const { scanDeviceDirectory } = await import('@/lib/privateLibrary')
+      const count = await scanDeviceDirectory()
+      if (count > 0) {
+        useAppStore.getState().bumpData()
+        toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
+      }
+    } catch {
+      requestVideoPick()
+    }
+  }
+
   return (
     <div className="px-4 py-4 md:px-6">
       {activeFolder ? (
@@ -167,8 +180,18 @@ export function VideosView() {
         </div>
       ) : (
         <div className="mb-4 flex min-h-11 items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">All Videos</h1>
-          <span className="vx-chip tabular-nums">{visible.length}</span>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-lg font-semibold tracking-tight">All Videos</h1>
+            <span className="vx-chip tabular-nums">{visible.length}</span>
+          </div>
+          <Button
+            onClick={() => void handleAddFolder()}
+            size="sm"
+            className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
+          >
+            <FolderSearch className="size-3.5" />
+            + Scan Device
+          </Button>
         </div>
       )}
 
@@ -179,16 +202,16 @@ export function VideosView() {
           hint={
             activeFolder
               ? 'This folder has no playable videos yet.'
-              : 'Import videos from this device’s storage to start watching.'
+              : 'Scan videos from this device’s storage to start watching.'
           }
           action={
             !activeFolder && (
               <Button
-                onClick={() => requestVideoPick()}
+                onClick={() => void handleAddFolder()}
                 className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
               >
                 <FolderSearch className="size-4" />
-                Scan device storage
+                + Add Folder / Scan Device
               </Button>
             )
           }

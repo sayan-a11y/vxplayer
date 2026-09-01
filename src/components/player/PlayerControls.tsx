@@ -330,39 +330,50 @@ export default function PlayerControls(props: PlayerControlsProps) {
                     </span>
                   )}
                 </div>
-                <QualityRow
-                  label="Auto"
-                  hint={autoQualityLabel ?? undefined}
-                  active={qualityPref === 'auto'}
-                  onClick={() => onQuality('auto')}
-                />
-                {qualities.map((q) => (
+                {qualities.length === 0 ? (
                   <QualityRow
-                    key={q.label}
-                    label={qualityDisplayLabel(q.label)}
-                    hint={
-                      q.status === 'READY'
-                        ? q.isSource
-                          ? 'Original'
-                          : `${q.fileSizeMB} MB`
-                        : q.status === 'PROCESSING'
-                          ? 'Processing…'
-                          : 'Unavailable'
-                    }
-                    active={qualityPref === q.label}
-                    processing={q.status === 'PROCESSING'}
-                    disabled={q.status !== 'READY'}
-                    onClick={() => onQuality(q.label)}
+                    label="Source Quality"
+                    hint="Original File"
+                    active={true}
+                    onClick={() => onQuality('auto')}
                   />
-                ))}
-                {readyCount === 0 && processingCount > 0 && (
-                  <div className="px-3 pb-1 pt-1 text-[11px] leading-snug text-white/40">
-                    Playback uses the original file until variants are ready.
-                  </div>
+                ) : (
+                  <>
+                    <QualityRow
+                      label="Auto"
+                      hint={autoQualityLabel ?? undefined}
+                      active={qualityPref === 'auto'}
+                      onClick={() => onQuality('auto')}
+                    />
+                    {qualities.map((q) => (
+                      <QualityRow
+                        key={q.label}
+                        label={qualityDisplayLabel(q.label)}
+                        hint={
+                          q.status === 'READY'
+                            ? q.isSource
+                              ? 'Original'
+                              : `${q.fileSizeMB} MB`
+                            : q.status === 'PROCESSING'
+                              ? 'Processing…'
+                              : 'Unavailable'
+                        }
+                        active={qualityPref === q.label}
+                        processing={q.status === 'PROCESSING'}
+                        disabled={q.status !== 'READY'}
+                        onClick={() => onQuality(q.label)}
+                      />
+                    ))}
+                    {readyCount === 0 && processingCount > 0 && (
+                      <div className="px-3 pb-1 pt-1 text-[11px] leading-snug text-white/40">
+                        Playback uses the original file until variants are ready.
+                      </div>
+                    )}
+                    <div className="px-1 pb-1 pt-1 text-[11px] leading-snug text-white/40">
+                      Auto matches quality to your screen · up to 2K/4K for high-res imports
+                    </div>
+                  </>
                 )}
-                <div className="px-1 pb-1 pt-1 text-[11px] leading-snug text-white/40">
-                  Auto matches quality to your screen · up to 2K/4K for high-res imports
-                </div>
               </div>
             </PopoverContent>
           </Popover>

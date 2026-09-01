@@ -170,6 +170,19 @@ export function HomeView() {
     )
   }
 
+  async function handleAddFolder() {
+    try {
+      const { scanDeviceDirectory } = await import('@/lib/privateLibrary')
+      const count = await scanDeviceDirectory()
+      if (count > 0) {
+        useAppStore.getState().bumpData()
+        toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
+      }
+    } catch {
+      requestVideoPick()
+    }
+  }
+
   if (videos.length === 0) {
     return (
       <div>
@@ -180,14 +193,14 @@ export function HomeView() {
           </div>
           <p className="mt-1.5 font-medium">Your library is empty</p>
           <p className="max-w-xs text-sm text-muted-foreground">
-            Import videos from this device's storage to start watching.
+            Scan or add videos from this device's storage to start watching.
           </p>
           <Button
-            onClick={() => requestVideoPick()}
+            onClick={() => void handleAddFolder()}
             className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
           >
             <FolderSearch className="size-4" />
-            Scan device storage
+            + Add Folder / Scan Device
           </Button>
         </div>
       </div>
