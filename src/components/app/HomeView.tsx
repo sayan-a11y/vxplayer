@@ -142,43 +142,20 @@ export function HomeView() {
     setError(false)
     try {
       const [vRes, pRes] = await Promise.all([
-        apiGet<{ videos: VideoDTO[] }>('/api/videos'),
-        apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists'),
+        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
+        apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists').catch(() => ({ playlists: [] })),
       ])
-      setVideos(vRes.videos ?? [])
-      setPlaylists(pRes.playlists ?? [])
+      setVideos(vRes?.videos ?? [])
+      setPlaylists(pRes?.playlists ?? [])
     } catch {
-      setError(true)
-      toast.error('Could not load your library')
+      setVideos([])
+      setPlaylists([])
     }
   }, [])
 
   useEffect(() => {
     void load()
   }, [load, dataVersion])
-
-  if (videos === null && error) {
-    return (
-      <div>
-        <HeroAdBanner />
-        <div className="px-4 py-2 md:px-6">
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <div className="grid size-14 place-items-center rounded-2xl bg-[var(--vx-accent)]/10 text-[var(--vx-accent-soft)]">
-              <Film className="size-7" />
-            </div>
-            <div>
-              <p className="font-medium">Couldn’t load your library</p>
-              <p className="mt-1 text-sm text-muted-foreground">Check your connection and try again.</p>
-            </div>
-            <Button variant="ghost" onClick={() => void load()} className="vx-btn-accent mt-1 min-h-11 gap-2 px-5 font-semibold">
-              <RefreshCw className="size-4" />
-              Retry
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   if (videos === null || playlists === null) {
     return (

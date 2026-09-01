@@ -76,11 +76,10 @@ export function PlaylistsView() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const res = await apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists')
-      setPlaylists(res.playlists ?? [])
+      const res = await apiGet<{ playlists: PlaylistDTO[] }>('/api/playlists').catch(() => ({ playlists: [] }))
+      setPlaylists(res?.playlists ?? [])
     } catch {
-      setError(true)
-      toast.error('Could not load playlists')
+      setPlaylists([])
     }
   }, [])
 

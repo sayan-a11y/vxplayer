@@ -7,7 +7,7 @@ const globalForPrisma = globalThis as unknown as {
   schemaInitialized?: boolean
 }
 
-function getDatabaseUrl(): string | undefined {
+function getDatabaseUrl(): string {
   // If running on Vercel or in serverless environment
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
     const tmpDbPath = '/tmp/custom.db'
@@ -35,10 +35,19 @@ function getDatabaseUrl(): string | undefined {
   return 'file:../db/custom.db'
 }
 
+const resolvedDbUrl = getDatabaseUrl()
+if (resolvedDbUrl) {
+  process.env.DATABASE_URL = resolvedDbUrl
+}
+
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
-    datasourceUrl: getDatabaseUrl(),
+    datasources: {
+      db: {
+        url: resolvedDbUrl,
+      },
+    },
     log: ['error', 'warn'],
   })
 

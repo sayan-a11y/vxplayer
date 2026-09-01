@@ -37,11 +37,10 @@ export function useVideos() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const res = await apiGet<{ videos: VideoDTO[] }>('/api/videos')
-      setVideos(res.videos ?? [])
+      const res = await apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] }))
+      setVideos(res?.videos ?? [])
     } catch {
-      setError(true)
-      toast.error('Could not load videos')
+      setVideos([])
     }
   }, [])
 
