@@ -30,7 +30,7 @@ import { useAppStore } from '@/lib/store'
 import type { AdminRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { adminPost, can, clearAdminSession, useAdminSession, type AdminSection } from './session'
-import { LockNote, RoleBadge } from './shared'
+import { AdminErrorBoundary, LockNote, RoleBadge } from './shared'
 import DashboardView from './views/DashboardView'
 import UsersView from './views/UsersView'
 import VideosView from './views/VideosView'
@@ -276,7 +276,9 @@ export default function AdminApp() {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="mx-auto max-w-[1200px] space-y-6 p-4 sm:p-6 lg:p-8"
           >
-            {renderSection()}
+            <AdminErrorBoundary>
+              {renderSection()}
+            </AdminErrorBoundary>
           </motion.div>
         </main>
       </div>

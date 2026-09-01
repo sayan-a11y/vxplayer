@@ -99,6 +99,38 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   )
 }
 
+import React from 'react'
+
+export class AdminErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Admin view runtime error caught:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <ErrorState
+          message="Failed to render this section. Please click retry."
+          onRetry={() => this.setState({ hasError: false, error: null })}
+        />
+      )
+    }
+    return this.props.children
+  }
+}
+
 export function EmptyState({ icon: Icon, title, hint }: { icon: LucideIcon; title: string; hint?: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
