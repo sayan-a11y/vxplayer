@@ -253,24 +253,20 @@ export async function finalizeVideoUpload(
   }
 
   const fileId = randomUUID()
-  const mediaDir = path.join(PUBLIC_DIR, 'media')
-  await mkdir(mediaDir, { recursive: true })
-  const destAbs = path.join(mediaDir, `${fileId}.${ext}`)
-  await moveFile(tmpAbs, destAbs)
+  let publicSrcUrl = `/media/${fileId}.${ext}`
+  let publicThumbUrl = `/thumbs/${fileId}.jpg`
 
-  // Thumbnail: frame at min(3s, 25%); sharp color fallback when ffmpeg is not present.
-  const thumbDir = path.join(PUBLIC_DIR, 'thumbs')
-  await mkdir(thumbDir, { recursive: true })
-  const thumbAbs = path.join(thumbDir, `${fileId}.jpg`)
+  // Thumbnail generation: try ffmpeg, fallback to sharp
+  const tmpThumbAbs = path.join(os.tmpdir(), `vx-thumb-${fileId}.jpg`)
   let thumbCreated = false
   const seek = Math.min(3, Math.max(0.5, (probe.durationSec ?? 3) * 0.25))
   try {
     await execFileAsync(
       'ffmpeg',
-      ['-nostdin', '-v', 'error', '-y', '-ss', String(seek), '-i', destAbs, '-frames:v', '1', '-q:v', '3', thumbAbs],
+      ['-nostdin', '-v', 'error', '-y', '-ss', String(seek), '-i', tmpAbs, '-frames:v', '1', '-q:v', '3', tmpThumbAbs],
       { timeout: 60_000 },
     )
-    const ts = await stat(thumbAbs)
+    const ts = await stat(tmpThumbAbs)
     if (ts.size > 0) thumbCreated = true
   } catch {}
 
@@ -285,9 +281,47 @@ export async function finalizeVideoUpload(
         },
       })
         .jpeg()
-        .toFile(thumbAbs)
+        .toFile(tmpThumbAbs)
+      thumbCreated = true
     } catch {}
   }
+
+  // Upload to Cloudflare R2 if configured
+  if (isR2Configured()) {
+    try {
+      const r2Video = await uploadFileToR2(tmpAbs, `media/${fileId}.${ext}`)
+      publicSrcUrl = r2Video.url
+      if (thumbCreated) {
+        const r2Thumb = await uploadFileToR2(tmpThumbAbs, `thumbs/${fileId}.jpg`)
+        publicThumbUrl = r2Thumb.url
+      }
+    } catch (e) {
+      console.warn('R2 video upload fallback:', e)
+    }
+  }
+
+  // If not hosted on R2 (local dev), save to local public directory
+  if (!publicSrcUrl.startsWith('http')) {
+    try {
+      const mediaDir = path.join(PUBLIC_DIR, 'media')
+      await mkdir(mediaDir, { recursive: true })
+      const destAbs = path.join(mediaDir, `${fileId}.${ext}`)
+      await moveFile(tmpAbs, destAbs)
+
+      if (thumbCreated) {
+        const thumbDir = path.join(PUBLIC_DIR, 'thumbs')
+        await mkdir(thumbDir, { recursive: true })
+        const thumbAbs = path.join(thumbDir, `${fileId}.jpg`)
+        await moveFile(tmpThumbAbs, thumbAbs)
+      }
+    } catch (e) {
+      console.warn('Local storage write warning:', e)
+    }
+  }
+
+  // Cleanup temporary working files
+  await rm(tmpAbs, { force: true }).catch(() => {})
+  await rm(tmpThumbAbs, { force: true }).catch(() => {})
 
   const video = await db.video.create({
     data: {
@@ -303,8 +337,8 @@ export async function finalizeVideoUpload(
       audioCodec: probe.audioCodec,
       container: ext,
       frameRate: probe.frameRate,
-      srcUrl: `/media/${fileId}.${ext}`,
-      thumbnailUrl: `/thumbs/${fileId}.jpg`,
+      srcUrl: publicSrcUrl,
+      thumbnailUrl: publicThumbUrl,
     },
     include: { history: true, qualities: true },
   })
