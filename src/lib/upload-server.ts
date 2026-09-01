@@ -37,7 +37,7 @@ export const CREATIVE_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 export const MAX_VIDEO_BYTES = 3 * 1024 * MB // 3 GB
 export const MAX_CREATIVE_VIDEO_BYTES = 500 * MB
 export const MAX_CREATIVE_IMAGE_BYTES = 25 * MB
-export const CHUNK_SIZE = 5 * MB
+export const CHUNK_SIZE = 3 * MB
 
 /** Error with an HTTP status the upload routes map straight through. */
 export class UploadError extends Error {

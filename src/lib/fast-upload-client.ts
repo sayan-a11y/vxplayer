@@ -12,7 +12,7 @@
  */
 import { toast } from 'sonner'
 
-const SMALL_FILE_BYTES = 6 * 1024 * 1024
+const SMALL_FILE_BYTES = 3 * 1024 * 1024 // 3 MB (safe under Vercel 4.5 MB limit)
 const PARALLEL_CHUNKS = 3
 const CHUNK_RETRIES = 3
 const XHR_TIMEOUT_MS = 5 * 60 * 1000
@@ -103,7 +103,7 @@ export async function fastUploadFile({
   })
   const initBody = await parseBody(await initRes.text())
   const uploadId = initBody.uploadId as string | undefined
-  const chunkSize = (initBody.chunkSize as number | undefined) ?? 5 * 1024 * 1024
+  const chunkSize = (initBody.chunkSize as number | undefined) ?? 3 * 1024 * 1024
   if (!initRes.ok || !uploadId) {
     throw new Error((initBody.error as string) || 'Upload could not start')
   }
