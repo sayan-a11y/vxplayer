@@ -85,6 +85,9 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
     if (manifestAd.mediaUrl) {
       preloadAdAsset(manifestAd.mediaUrl, manifestAd.type)
     }
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[AD] ${params.placement} → ${manifestAd.creativeId}`)
+    }
     return manifestAd
   }
 
@@ -112,6 +115,9 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
     if (res && res.ad) {
       if (res.ad.mediaUrl) {
         preloadAdAsset(res.ad.mediaUrl, res.ad.type)
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[AD] ${params.placement} → ${res.ad.creativeId}`)
       }
       return res.ad
     }

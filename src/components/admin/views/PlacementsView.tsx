@@ -18,6 +18,12 @@ const PLACEMENT_META: {
   flow: string
 }[] = [
   {
+    id: 'HERO',
+    settingKey: 'heroEnabled',
+    desc: 'Premium showcase ad slot positioned at the top of Home above Continue Watching. Plays video or image.',
+    flow: 'HOME VIEW → HERO AD (VIDEO/IMAGE) → CONTINUE WATCHING → CONTENT',
+  },
+  {
     id: 'PRE_ROLL',
     settingKey: 'preRollEnabled',
     desc: 'Short ad played before the selected video starts. Highest completion rate of all slots.',
@@ -44,7 +50,7 @@ const PLACEMENT_META: {
   {
     id: 'BANNER',
     settingKey: 'bannerEnabled',
-    desc: 'Static banner / autoplaying hero slot on home / detail screens, outside of video playback.',
+    desc: 'Independent banner slot rendered across content pages outside video playback.',
     flow: 'OPEN APP / BROWSE → BANNER SLOT → CONTENT',
   },
   {

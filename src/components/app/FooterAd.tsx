@@ -9,12 +9,13 @@ import { getCachedAd, requestAd, trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
 
 /**
- * Footer ad banner — the black sponsored strip at the bottom of the app
+ * Footer ad banner — the dedicated sponsored container at the bottom of the app
  * (above the branding row, below all content, on every view).
- * Renders instantly from cache (0ms) and syncs live from FOOTER / BANNER.
+ * Renders instantly from cache (0ms) and syncs live from FOOTER placement.
+ * Independent placement: never replaces or conflicts with Hero or Banner.
  */
 export function FooterAd() {
-  const [ad, setAd] = useState<ServedAd | null>(() => getCachedAd('FOOTER') || getCachedAd('BANNER'))
+  const [ad, setAd] = useState<ServedAd | null>(() => getCachedAd('FOOTER'))
   const [muted, setMuted] = useState(true)
   const [paused, setPaused] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -24,16 +25,11 @@ export function FooterAd() {
     if (typeof window === 'undefined') return
     let cancelled = false
     void (async () => {
-      let served = await requestAd({ placement: 'FOOTER' })
-      if (!served) {
-        served = await requestAd({ placement: 'BANNER' })
-      }
-      if (cancelled) return
-      if (served) {
-        setAd(served)
-        void trackAdEvent(served, 'IMPRESSION')
-        if (served.type !== 'VIDEO') void trackAdEvent(served, 'START')
-      }
+      const served = await requestAd({ placement: 'FOOTER' })
+      if (cancelled || !served) return
+      setAd(served)
+      void trackAdEvent(served, 'IMPRESSION')
+      if (served.type !== 'VIDEO') void trackAdEvent(served, 'START')
     })()
     return () => {
       cancelled = true

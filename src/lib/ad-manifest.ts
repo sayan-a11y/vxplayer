@@ -94,7 +94,7 @@ export function preloadNextAds(): void {
   const now = Date.now()
 
   // Preload top 1 creative for each placement
-  const placements: AdPlacement[] = ['PRE_ROLL', 'MID_ROLL', 'POST_ROLL', 'OVERLAY', 'BANNER', 'FOOTER']
+  const placements: AdPlacement[] = ['HERO', 'PRE_ROLL', 'MID_ROLL', 'POST_ROLL', 'OVERLAY', 'BANNER', 'FOOTER']
   for (const p of placements) {
     const candidate = manifest.ads.find(
       (a) => a.placement === p && new Date(a.expiresAt).getTime() > now && !!a.mediaUrl
@@ -126,6 +126,7 @@ export function selectAdFromManifest(
 
   // 2. Per-placement kill switch
   const placementEnabledMap: Record<AdPlacement, boolean> = {
+    HERO: settings.heroEnabled ?? true,
     PRE_ROLL: settings.preRollEnabled ?? true,
     MID_ROLL: settings.midRollEnabled ?? true,
     POST_ROLL: settings.postRollEnabled ?? true,

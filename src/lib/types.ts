@@ -53,7 +53,14 @@ export type PlaylistDTO = {
   videos: VideoDTO[]
 }
 
-export type AdPlacement = 'PRE_ROLL' | 'MID_ROLL' | 'POST_ROLL' | 'OVERLAY' | 'BANNER' | 'FOOTER'
+export type AdPlacement =
+  | 'HERO'
+  | 'PRE_ROLL'
+  | 'MID_ROLL'
+  | 'POST_ROLL'
+  | 'OVERLAY'
+  | 'BANNER'
+  | 'FOOTER'
 
 export type ServedAd = {
   campaignId: string
@@ -95,6 +102,7 @@ export type AdCacheBundle = {
 
 export type SettingsDTO = {
   adsEnabled: boolean
+  heroEnabled?: boolean
   preRollEnabled: boolean
   midRollEnabled: boolean
   postRollEnabled: boolean

@@ -262,6 +262,7 @@ export function actionMeta(action: string): { icon: LucideIcon; className: strin
 // ── Placements / utils ──────────────────────────────────────────────────────
 
 export const PLACEMENT_LABELS: Record<AdPlacement, string> = {
+  HERO: 'Hero',
   PRE_ROLL: 'Pre-Roll',
   MID_ROLL: 'Mid-Roll',
   POST_ROLL: 'Post-Roll',
@@ -271,6 +272,7 @@ export const PLACEMENT_LABELS: Record<AdPlacement, string> = {
 }
 
 export const ALL_PLACEMENTS: AdPlacement[] = [
+  'HERO',
   'PRE_ROLL',
   'MID_ROLL',
   'POST_ROLL',

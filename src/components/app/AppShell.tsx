@@ -202,13 +202,13 @@ export function AppShell() {
     <div className="vx-root flex min-h-screen flex-col text-foreground">
       {/* ── Header ─────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 border-b border-white/5 bg-black/30 backdrop-blur-xl">
-        <div className="flex h-16 items-center justify-between gap-2 px-4 md:px-6">
-          <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex h-16 items-center justify-between gap-2 px-3 sm:px-4 md:px-6">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
               onClick={registerLogoTap}
               aria-label="VX Player home — admin access"
-              className="flex min-h-11 items-center gap-2.5 rounded-xl px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60"
+              className="flex min-h-11 items-center gap-2 rounded-xl px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60"
             >
               <span
                 aria-hidden="true"
@@ -234,11 +234,11 @@ export function AppShell() {
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
             <Button
               onClick={() => requestVideoPick()}
               size="sm"
-              className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
+              className="vx-btn-accent h-9 gap-1.5 rounded-xl px-2.5 text-xs font-semibold sm:px-3"
               aria-label="Add videos from device"
             >
               <Plus className="size-3.5" />
@@ -260,7 +260,7 @@ export function AppShell() {
                 <Button
                   variant="ghost"
                   aria-label="Sort library"
-                  className="min-h-11 gap-2 rounded-xl px-2.5 text-sm text-muted-foreground hover:bg-white/5 hover:text-foreground md:px-3"
+                  className="min-h-11 gap-1.5 rounded-xl px-2 text-sm text-muted-foreground hover:bg-white/5 hover:text-foreground md:px-3"
                 >
                   <ArrowUpDown className="size-4" />
                   <span className="hidden md:inline">{currentSortLabel}</span>
@@ -347,17 +347,17 @@ export function AppShell() {
             viewport bottom on short pages and is pushed down on long ones
             (on mobile the sidebar is hidden, so this is the full width). */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="vx-scroll min-w-0 flex-1 px-4 pt-6 pb-8 md:px-8 md:pb-10">
+          <main className="vx-scroll min-w-0 flex-1 px-3.5 py-4 pb-6 sm:px-5 sm:py-6 md:px-8 md:pb-8">
             {renderView(view)}
           </main>
 
           {/* ── Footer (ad banner + branding) ─────────────────────── */}
           <footer className="mt-auto border-t border-white/5 bg-black/40 backdrop-blur-xl">
-            <div className="px-4 pt-4 md:px-6">
+            <div className="px-3.5 pt-4 sm:px-5 md:px-8">
               <FooterAd />
             </div>
-            <div className="flex items-center justify-between gap-3 px-4 pb-[calc(1.25rem+4rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-5">
-              <p className="text-[11px] text-muted-foreground">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3.5 pb-[calc(1.25rem+4rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 md:px-8 md:pb-5">
+              <p className="text-[11px] text-muted-foreground text-center sm:text-left">
                 © {new Date().getFullYear()} VX Player · Play Everything. Anywhere. Offline.
               </p>
               <p className="hidden text-[11px] text-muted-foreground sm:block">

@@ -18,6 +18,7 @@ async function getSettingsRow(): Promise<AppSettings> {
 function toSettingsDTO(s: AppSettings): SettingsDTO {
   return {
     adsEnabled: s.adsEnabled,
+    heroEnabled: (s as any).heroEnabled ?? true,
     preRollEnabled: s.preRollEnabled,
     midRollEnabled: s.midRollEnabled,
     postRollEnabled: s.postRollEnabled,
@@ -62,6 +63,7 @@ const clampInt = (v: number, min: number, max: number) =>
 /** Keys that act as ad kill switches — changes here are audited as ADS_KILL_SWITCH. */
 const KILL_SWITCH_KEYS = [
   'adsEnabled',
+  'heroEnabled',
   'preRollEnabled',
   'midRollEnabled',
   'postRollEnabled',

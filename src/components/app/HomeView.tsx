@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
+import { BannerAd } from './BannerAd'
 import { HeroAdBanner } from './HeroAdBanner'
 import { VideoCard } from './VideoCard'
 
@@ -51,7 +52,7 @@ function Section({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="mt-7"
+      className="mt-6 sm:mt-7"
       aria-label={title}
     >
       <div className="mb-3 flex min-h-9 items-center justify-between gap-2">
@@ -77,7 +78,7 @@ function Section({
 
 function Scroller({ children }: { children: ReactNode }) {
   return (
-    <div className="vx-scroll -mx-4 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 pb-1 md:-mx-6 md:px-6">
+    <div className="vx-scroll -mx-3 sm:-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 sm:px-4 pb-1 md:-mx-6 md:px-6">
       {children}
     </div>
   )
@@ -110,14 +111,14 @@ function PlaylistCollage({ videos }: { videos: VideoDTO[] }) {
 
 function HomeSkeleton() {
   return (
-    <div className="px-4 md:px-6">
-      <div className="mt-6 space-y-8">
+    <div className="w-full">
+      <div className="mt-4 space-y-7">
         {[0, 1, 2].map((i) => (
           <div key={i}>
             <Skeleton className="mb-3 h-5 w-44" />
-            <div className="flex gap-3.5 overflow-hidden">
+            <div className="flex gap-3 overflow-hidden">
               {[0, 1, 2, 3, 4].map((j) => (
-                <div key={j} className="w-40 shrink-0 space-y-2 sm:w-44">
+                <div key={j} className="w-36 shrink-0 space-y-2 sm:w-44">
                   <Skeleton className="aspect-video w-full rounded-xl" />
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-3 w-1/2" />
@@ -162,7 +163,7 @@ export function HomeView() {
 
   if (videos === null || playlists === null) {
     return (
-      <div>
+      <div className="w-full">
         <HeroAdBanner />
         <HomeSkeleton />
       </div>
@@ -184,9 +185,9 @@ export function HomeView() {
 
   if (videos.length === 0) {
     return (
-      <div>
+      <div className="w-full">
         <HeroAdBanner />
-        <div className="flex flex-col items-center gap-2 py-20 text-center">
+        <div className="flex flex-col items-center gap-2 py-16 text-center sm:py-20">
           <div className="grid size-14 place-items-center rounded-2xl border border-white/5 bg-white/5 text-muted-foreground">
             <Clapperboard className="size-7" />
           </div>
@@ -222,69 +223,76 @@ export function HomeView() {
   const recentlyAdded = [...videos].sort(byRecentAdded).slice(0, 10)
 
   return (
-    <div>
+    <div className="w-full">
+      {/* 1. Dedicated Hero Ad slot at top of Home */}
       <HeroAdBanner />
-      <div className="px-4 pb-2 md:px-6">
-        {continueWatching.length > 0 && (
-          <Section title="Continue Watching" icon={History} onSeeAll={() => setView('history')}>
-            <Scroller>
-              {continueWatching.map((v) => (
-                <VideoCard
-                  key={v.id}
-                  video={v}
-                  variant="wide"
-                  queue={continueWatching}
-                  footerNote={v.history ? `Resume at ${formatDuration(v.history.position)}` : undefined}
-                />
-              ))}
-            </Scroller>
-          </Section>
-        )}
 
-        <Section
-          title="Recently Added"
-          icon={Sparkles}
-          onSeeAll={() => {
-            setLibrarySort('recent_added')
-            setView('videos')
-          }}
-        >
+      {/* 2. Continue Watching */}
+      {continueWatching.length > 0 && (
+        <Section title="Continue Watching" icon={History} onSeeAll={() => setView('history')}>
           <Scroller>
-            {recentlyAdded.map((v) => (
-              <VideoCard key={v.id} video={v} variant="wide" queue={recentlyAdded} />
+            {continueWatching.map((v) => (
+              <VideoCard
+                key={v.id}
+                video={v}
+                variant="wide"
+                queue={continueWatching}
+                footerNote={v.history ? `Resume at ${formatDuration(v.history.position)}` : undefined}
+              />
             ))}
           </Scroller>
         </Section>
+      )}
 
-        {playlists.length > 0 && (
-          <Section title="Playlists" icon={ListVideo} onSeeAll={() => setView('playlists')}>
-            <Scroller>
-              {playlists.map((pl) => (
-                <button
-                  key={pl.id}
-                  type="button"
-                  onClick={() => setView('playlists')}
-                  className="vx-card w-44 shrink-0 snap-start p-3 text-left transition hover:border-[var(--vx-accent)]/40 hover:bg-white/[0.06]"
-                >
-                  <PlaylistCollage videos={pl.videos} />
-                  <p className="mt-2.5 truncate text-sm font-medium">{pl.name}</p>
-                  <p className="text-[11px] tabular-nums text-muted-foreground">
-                    {pl.videos.length} video{pl.videos.length === 1 ? '' : 's'}
-                  </p>
-                </button>
-              ))}
-            </Scroller>
-          </Section>
-        )}
+      {/* 3. Recently Added */}
+      <Section
+        title="Recently Added"
+        icon={Sparkles}
+        onSeeAll={() => {
+          setLibrarySort('recent_added')
+          setView('videos')
+        }}
+      >
+        <Scroller>
+          {recentlyAdded.map((v) => (
+            <VideoCard key={v.id} video={v} variant="wide" queue={recentlyAdded} />
+          ))}
+        </Scroller>
+      </Section>
 
-        <Section title="All Videos" icon={Film} onSeeAll={() => setView('videos')}>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {videos.slice(0, 12).map((v) => (
-              <VideoCard key={v.id} video={v} queue={videos.slice(0, 12)} />
+      {/* 4. Playlists */}
+      {playlists.length > 0 && (
+        <Section title="Playlists" icon={ListVideo} onSeeAll={() => setView('playlists')}>
+          <Scroller>
+            {playlists.map((pl) => (
+              <button
+                key={pl.id}
+                type="button"
+                onClick={() => setView('playlists')}
+                className="vx-card w-40 shrink-0 snap-start p-3 text-left transition hover:border-[var(--vx-accent)]/40 hover:bg-white/[0.06] sm:w-44"
+              >
+                <PlaylistCollage videos={pl.videos} />
+                <p className="mt-2.5 truncate text-sm font-medium">{pl.name}</p>
+                <p className="text-[11px] tabular-nums text-muted-foreground">
+                  {pl.videos.length} video{pl.videos.length === 1 ? '' : 's'}
+                </p>
+              </button>
             ))}
-          </div>
+          </Scroller>
         </Section>
-      </div>
+      )}
+
+      {/* 5. All Videos */}
+      <Section title="All Videos" icon={Film} onSeeAll={() => setView('videos')}>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {videos.slice(0, 12).map((v) => (
+            <VideoCard key={v.id} video={v} queue={videos.slice(0, 12)} />
+          ))}
+        </div>
+      </Section>
+
+      {/* 6. Dedicated Banner Ad slot */}
+      <BannerAd />
     </div>
   )
 }

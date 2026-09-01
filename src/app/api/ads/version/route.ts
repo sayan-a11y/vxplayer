@@ -35,6 +35,7 @@ export async function GET(req: Request) {
       version: serverVersion,
       settings: {
         adsEnabled: settings.adsEnabled,
+        heroEnabled: (settings as any).heroEnabled ?? true,
         preRollEnabled: settings.preRollEnabled,
         midRollEnabled: settings.midRollEnabled,
         postRollEnabled: settings.postRollEnabled,

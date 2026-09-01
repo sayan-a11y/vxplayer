@@ -15,11 +15,13 @@ async function getSettingsRow(): Promise<AppSettings> {
 function toSettingsDTO(s: AppSettings): SettingsDTO {
   return {
     adsEnabled: s.adsEnabled,
+    heroEnabled: (s as any).heroEnabled ?? true,
     preRollEnabled: s.preRollEnabled,
     midRollEnabled: s.midRollEnabled,
     postRollEnabled: s.postRollEnabled,
     overlayEnabled: s.overlayEnabled,
     bannerEnabled: s.bannerEnabled,
+    footerEnabled: (s as any).footerEnabled ?? true,
     adsPerSession: s.adsPerSession,
     maxMidRolls: s.maxMidRolls,
     overlayPerHour: s.overlayPerHour,

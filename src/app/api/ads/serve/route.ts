@@ -103,7 +103,13 @@ export async function GET(req: Request) {
 
       const matching = campaign.creatives.filter((c) => {
         const t = (c.type || '').toUpperCase()
-        return types.includes(t) || (placement === 'PRE_ROLL' && t === 'VIDEO') || (placement === 'BANNER' && (t === 'BANNER' || t === 'IMAGE' || t === 'VIDEO'))
+        return (
+          types.includes(t) ||
+          (placement === 'HERO' && (t === 'VIDEO' || t === 'IMAGE' || t === 'BANNER' || t === 'TEXT')) ||
+          (placement === 'PRE_ROLL' && t === 'VIDEO') ||
+          (placement === 'BANNER' && (t === 'BANNER' || t === 'IMAGE' || t === 'TEXT' || t === 'VIDEO')) ||
+          (placement === 'FOOTER' && (t === 'IMAGE' || t === 'BANNER' || t === 'TEXT' || t === 'OVERLAY' || t === 'VIDEO'))
+        )
       })
 
       const pool = matching.length > 0 ? matching : campaign.creatives

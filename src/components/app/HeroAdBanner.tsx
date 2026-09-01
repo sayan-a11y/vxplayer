@@ -9,15 +9,16 @@ import { getCachedAd, requestAd, trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
 
 /**
- * Hero ad banner — the premium black ad slot at the top of Home (above
- * Continue Watching). Plays admin-uploaded VIDEO creatives (autoplaying
+ * Hero ad banner — the dedicated showcase ad container at the top of Home
+ * (above Continue Watching). Plays admin-uploaded VIDEO creatives (autoplaying
  * muted, looped, with sound toggle) and IMAGE creatives (crisp cover)
- * full-width, responsive on every device. Served live from the BANNER
+ * full-width, responsive on every device. Served live from the HERO
  * placement: kill switches, session caps and frequency caps all apply.
  * Renders instantly from cache (0ms) and syncs with server.
+ * Never replaced by or mixed with Footer or Banner placements.
  */
 export function HeroAdBanner() {
-  const [ad, setAd] = useState<ServedAd | null>(() => getCachedAd('BANNER'))
+  const [ad, setAd] = useState<ServedAd | null>(() => getCachedAd('HERO'))
   const [muted, setMuted] = useState(true)
   const [paused, setPaused] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -27,7 +28,7 @@ export function HeroAdBanner() {
     if (typeof window === 'undefined') return
     let cancelled = false
     void (async () => {
-      const served = await requestAd({ placement: 'BANNER' })
+      const served = await requestAd({ placement: 'HERO' })
       if (cancelled) return
       if (served) {
         setAd(served)
@@ -85,7 +86,7 @@ export function HeroAdBanner() {
   }
 
   return (
-    <div className="px-4 pt-4 md:px-6 md:pt-5" role="complementary" aria-label="Sponsored">
+    <div className="w-full mb-6" role="complementary" aria-label="Sponsored">
       <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 sm:h-52 md:h-60 lg:h-72">
         {/* Media layer */}
         {isVideo ? (

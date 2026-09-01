@@ -40,20 +40,24 @@ import { adminGet, adminPatch, adminPost, can, useAdminSession } from '../sessio
 import { ErrorState, LoadingCards, PageHeader, StatCard } from '../shared'
 
 const PLACEMENT_KILLS: { key: keyof SettingsDTO; label: string; desc: string }[] = [
+  { key: 'heroEnabled', label: 'Hero', desc: 'Hero showcase slot at the top of Home' },
   { key: 'preRollEnabled', label: 'Pre-Roll', desc: 'Ads before the video starts' },
   { key: 'midRollEnabled', label: 'Mid-Roll', desc: 'Ad breaks during playback' },
   { key: 'postRollEnabled', label: 'Post-Roll', desc: 'Ads after the video ends' },
   { key: 'overlayEnabled', label: 'Overlay', desc: 'Non-intrusive in-player overlay' },
-  { key: 'bannerEnabled', label: 'Banner', desc: 'Banner slots outside the player' },
+  { key: 'bannerEnabled', label: 'Banner', desc: 'Banner slots in content pages' },
+  { key: 'footerEnabled', label: 'Footer', desc: 'Footer ad slot above bottom navigation' },
 ]
 
 const DEFAULT_SETTINGS: SettingsDTO = {
   adsEnabled: true,
+  heroEnabled: true,
   preRollEnabled: true,
   midRollEnabled: true,
   postRollEnabled: true,
   overlayEnabled: true,
   bannerEnabled: true,
+  footerEnabled: true,
   adsPerSession: 6,
   maxMidRolls: 2,
   overlayPerHour: 3,

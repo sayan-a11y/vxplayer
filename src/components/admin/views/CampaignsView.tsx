@@ -107,7 +107,7 @@ function emptyForm(): CampaignForm {
     endAt: isoDay(30),
     priority: 'HIGH',
     frequencyCap: 6,
-    placements: ['BANNER', 'PRE_ROLL'],
+    placements: ['HERO', 'BANNER', 'PRE_ROLL'],
     creatives: [
       {
         name: 'Main Creative',

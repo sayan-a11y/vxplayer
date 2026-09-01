@@ -6,6 +6,7 @@ import type { AppSettings, Campaign, Creative } from '@prisma/client'
 import type { AdEventType, AdPlacement, ServedAd } from '@/lib/types'
 
 export const PLACEMENTS: readonly AdPlacement[] = [
+  'HERO',
   'PRE_ROLL',
   'MID_ROLL',
   'POST_ROLL',
@@ -39,6 +40,9 @@ export const PRIORITY_RANK: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 
 /** Creative types eligible per placement (API contract). */
 export function allowedCreativeTypes(placement: AdPlacement): string[] {
   switch (placement) {
+    case 'HERO':
+      // Dedicated Hero slot serves video (autoplaying muted) and image creatives
+      return ['VIDEO', 'IMAGE', 'BANNER', 'TEXT']
     case 'PRE_ROLL':
     case 'MID_ROLL':
     case 'POST_ROLL':
@@ -47,9 +51,8 @@ export function allowedCreativeTypes(placement: AdPlacement): string[] {
     case 'OVERLAY':
       return ['IMAGE', 'OVERLAY', 'TEXT']
     case 'BANNER':
-      // Banner/hero slot serves admin VIDEO creatives as autoplaying
-      // muted hero spots, plus images and text cards.
-      return ['VIDEO', 'IMAGE', 'TEXT', 'BANNER']
+      // Banner slot serves images, text cards, and display banners outside video playback.
+      return ['IMAGE', 'BANNER', 'TEXT', 'VIDEO']
     case 'FOOTER':
       return ['IMAGE', 'BANNER', 'TEXT', 'OVERLAY', 'VIDEO']
   }
@@ -58,6 +61,7 @@ export function allowedCreativeTypes(placement: AdPlacement): string[] {
 /** Per-placement kill switch map from the settings singleton. */
 export function placementFlags(s: AppSettings): Record<AdPlacement, boolean> {
   return {
+    HERO: (s as any).heroEnabled ?? true,
     PRE_ROLL: s.preRollEnabled,
     MID_ROLL: s.midRollEnabled,
     POST_ROLL: s.postRollEnabled,

@@ -42,6 +42,11 @@ export async function ensureSchema(): Promise<void> {
 
   try {
     // 1. Ensure AppSettings singleton exists
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "heroEnabled" BOOLEAN DEFAULT true;
+      ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "footerEnabled" BOOLEAN DEFAULT true;
+    `).catch(() => {})
+
     const settings = await db.appSettings.findFirst().catch(() => null)
     if (!settings) {
       await db.appSettings.create({
