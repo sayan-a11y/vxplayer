@@ -6,7 +6,7 @@
  * locally in IndexedDB with instant 0-second playback and remain 100% private.
  */
 import { toast } from 'sonner'
-import { saveLocalVideo } from '@/lib/local-media-db'
+import { saveLocalVideo } from '@/lib/privateLibrary'
 import { useAppStore, type UploadTask } from '@/lib/store'
 
 /** Custom event AppShell listens on to open its hidden <input type="file">. */

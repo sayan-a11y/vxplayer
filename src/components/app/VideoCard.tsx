@@ -75,7 +75,7 @@ export function VideoCard({ video, queue, variant = 'grid', footerNote }: VideoC
     setDeleteBusy(true)
     try {
       if (video.id.startsWith('local_')) {
-        const { deleteLocalVideo } = await import('@/lib/local-media-db')
+        const { deleteLocalVideo } = await import('@/lib/privateLibrary')
         await deleteLocalVideo(video.id)
       } else {
         await apiDelete(`/api/videos/${video.id}`)

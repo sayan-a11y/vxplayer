@@ -28,7 +28,7 @@ export function sortVideos(list: VideoDTO[], sort: LibrarySort): VideoDTO[] {
   return arr.sort((a, b) => b.sizeMB - a.sizeMB)
 }
 
-import { getLocalVideos } from '@/lib/local-media-db'
+import { getLocalVideos } from '@/lib/privateLibrary'
 
 /** Shared videos fetch — refetches when the global dataVersion bumps. */
 export function useVideos() {
