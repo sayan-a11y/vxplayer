@@ -90,7 +90,9 @@ export async function POST(req: Request) {
       : ['BANNER', 'PRE_ROLL']
 
     const creativesInput = Array.isArray(body.creatives) ? (body.creatives as CreativeInput[]) : []
-    const creativesData = creativesInput.map((raw) => buildCreativeData(raw)).filter((c): c is NonNullable<ReturnType<typeof buildCreativeData>> => !!c)
+    const creativesData = creativesInput
+      .map((raw) => buildCreativeData(raw))
+      .filter((c): c is NonNullable<ReturnType<typeof buildCreativeData>> => !!c)
 
     const created = await db.campaign.create({
       data: {
@@ -102,7 +104,7 @@ export async function POST(req: Request) {
         priority,
         frequencyCap,
         placements: placements.join(','),
-        creatives: { create: creativesData },
+        creatives: creativesData.length > 0 ? { create: creativesData } : undefined,
       },
       include: { creatives: true },
     })
@@ -118,12 +120,13 @@ export async function POST(req: Request) {
       session.email,
       'CAMPAIGN_CREATED',
       name,
-      `Created campaign "${name}" for ${advertiser} (status ${status}, priority ${priority}, ${creativesData.length} creative(s), placements: ${placements.join(', ') || 'none'})`
+      `Created campaign "${name}" for ${advertiser}`
     )
 
     return NextResponse.json({ campaign: toCampaignDTO(created, ZERO_STATS) })
   } catch (err) {
     console.error('POST /api/admin/campaigns failed:', err)
-    return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : 'Failed to create campaign'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

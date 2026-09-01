@@ -247,19 +247,9 @@ export default function CampaignsView() {
   }
 
   async function save() {
-    if (!form.name.trim() || !form.advertiser.trim()) {
-      toast.error('Campaign name and advertiser are required.')
-      return
-    }
-    if (!form.startAt || !form.endAt) {
-      toast.error('Start and end dates are required.')
-      return
-    }
-    if (!form.placements.length) {
-      toast.error('Pick at least one placement.')
-      return
-    }
     setSaving(true)
+    const name = form.name.trim() || 'New Campaign'
+    const advertiser = form.advertiser.trim() || 'VX Player Ads'
     let startIso = new Date().toISOString()
     let endIso = new Date(Date.now() + 30 * 864e5).toISOString()
     try {
@@ -270,8 +260,8 @@ export default function CampaignsView() {
     } catch {}
 
     const payload = {
-      name: form.name.trim() || 'New Campaign',
-      advertiser: form.advertiser.trim() || 'Advertiser',
+      name,
+      advertiser,
       status: form.status || 'ACTIVE',
       priority: form.priority || 'HIGH',
       frequencyCap: Number(form.frequencyCap) || 6,
