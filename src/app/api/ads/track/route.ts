@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { isAdEventType, isAdPlacement } from '../serve/eligibility'
 
 export const dynamic = 'force-dynamic'
@@ -11,6 +11,7 @@ export const runtime = 'nodejs'
  */
 export async function POST(req: Request) {
   try {
+    await ensureSchema()
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
     if (!body) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import type { AdPlacement } from '@/lib/types'
 import {
   allowedCreativeTypes,
@@ -22,6 +22,7 @@ const HOUR_MS = 60 * 60 * 1000
  */
 export async function GET(req: Request) {
   try {
+    await ensureSchema()
     const url = new URL(req.url)
     const placementParam = url.searchParams.get('placement')
     if (!isAdPlacement(placementParam)) {

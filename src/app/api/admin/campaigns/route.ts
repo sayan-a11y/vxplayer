@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { requireAuth } from '@/lib/admin-auth'
 import {
   ALL_PLACEMENTS,
@@ -21,6 +21,7 @@ export const runtime = 'nodejs'
 /** GET /api/admin/campaigns — all campaigns with creatives and aggregated ad stats. */
 export async function GET(req: Request) {
   try {
+    await ensureSchema()
     const session = requireAuth(req)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
