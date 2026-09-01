@@ -114,7 +114,7 @@ export function HomeFeedAd() {
               muted={muted}
               loop
               playsInline
-              preload="metadata"
+              preload="auto"
               className="size-full object-cover"
             />
           ) : isImage ? (
@@ -122,6 +122,8 @@ export function HomeFeedAd() {
               src={ad.mediaUrl!}
               alt={ad.headline || 'Sponsored'}
               fill
+              priority
+              loading="eager"
               sizes="(max-width: 768px) 100vw, 1200px"
               className="object-cover"
               onError={() => setImgError(true)}

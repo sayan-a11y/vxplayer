@@ -82,6 +82,8 @@ export function BetweenCardsAd() {
             src={ad.mediaUrl!}
             alt={ad.headline || 'Sponsored'}
             fill
+            priority
+            loading="eager"
             sizes="(max-width: 768px) 50vw, 300px"
             className="object-cover"
             onError={() => setImgError(true)}

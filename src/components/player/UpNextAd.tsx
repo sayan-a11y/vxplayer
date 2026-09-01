@@ -73,6 +73,8 @@ export function UpNextAd({ videoId }: { videoId?: string }) {
             src={ad.mediaUrl}
             alt={ad.headline || 'Sponsored'}
             fill
+            priority
+            loading="eager"
             sizes="80px"
             className="object-cover"
             onError={() => setImgError(true)}

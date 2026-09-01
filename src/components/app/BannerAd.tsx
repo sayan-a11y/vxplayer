@@ -82,6 +82,8 @@ export function BannerAd() {
                 src={ad.mediaUrl}
                 alt={ad.headline || 'Sponsored Banner'}
                 fill
+                priority
+                loading="eager"
                 sizes="(max-width: 640px) 100vw, 200px"
                 className="object-cover"
                 onError={() => setImgError(true)}
