@@ -75,8 +75,56 @@ export async function fastUploadFile({
   const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mkv|mov|m4v|3gp|avi)$/i.test(file.name)
   const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|svg)$/i.test(file.name)
 
-  // ── 1. Fast Direct Cloudflare R2 Presigned Upload (Bypasses all serverless limits) ──
-  if (kind === 'creative' && token) {
+  // ── 1. Fast Direct Cloudflare R2 Presigned Upload (User Videos) ──
+  if (kind === 'video') {
+    try {
+      const presignRes = await fetch('/api/videos/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: file.name,
+          type: file.type || 'video/mp4',
+        }),
+      })
+
+      if (presignRes.ok) {
+        const presignData = (await presignRes.json()) as { uploadUrl?: string; publicUrl?: string }
+        if (presignData.uploadUrl && presignData.publicUrl) {
+          const res = await xhrSend(
+            'PUT',
+            presignData.uploadUrl,
+            file,
+            { 'Content-Type': file.type || 'video/mp4' },
+            (loaded) => onProgress?.(Math.min(95, Math.round((loaded / file.size) * 100)))
+          )
+
+          if (res.status >= 200 && res.status < 300) {
+            onProgress?.(98)
+            // Register video in Supabase
+            const regRes = await fetch('/api/videos/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: file.name,
+                srcUrl: presignData.publicUrl,
+                sizeMB: Math.max(1, Math.round(file.size / (1024 * 1024))),
+              }),
+            })
+            if (regRes.ok) {
+              const regData = (await regRes.json()) as { video?: unknown }
+              onProgress?.(100)
+              return (regData as Record<string, unknown>) ?? { video: regData.video }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Direct R2 video presigned upload failed, falling back to server route:', e)
+    }
+  }
+
+  // ── 2. Fast Direct Cloudflare R2 Presigned Upload (Admin Creatives) ──
+  if (kind === 'creative') {
     try {
       const presignRes = await fetch('/api/admin/r2/presign', {
         method: 'POST',
