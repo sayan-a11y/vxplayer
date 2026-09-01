@@ -146,9 +146,6 @@ export function selectAdFromManifest(
   const candidates = (manifest.ads || []).filter((ad) => {
     if (ad.placement !== placement) return false
     if (new Date(ad.expiresAt).getTime() <= now) return false
-    // Frequency cap check per campaign for current viewer session
-    const sessionCount = store.sessionImpressions[ad.campaignId] ?? 0
-    if (sessionCount >= 2) return false
     return true
   })
 
@@ -158,7 +155,10 @@ export function selectAdFromManifest(
   const priorityRank: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
   candidates.sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3))
 
-  return candidates[0]
+  // Pick random among highest priority
+  const highestPriority = candidates[0].priority
+  const topPool = candidates.filter((c) => c.priority === highestPriority)
+  return topPool[Math.floor(Math.random() * topPool.length)]
 }
 
 // ── Versioned Incremental Synchronization (<5ms check) ──

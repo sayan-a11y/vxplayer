@@ -23,7 +23,7 @@ export async function GET() {
     const now = new Date()
 
     const campaigns = await db.campaign.findMany({
-      where: { status: 'ACTIVE', startAt: { lte: now }, endAt: { gte: now } },
+      where: { status: 'ACTIVE', endAt: { gte: now } },
       include: { creatives: true },
     })
 
@@ -34,12 +34,13 @@ export async function GET() {
       // Never cache ads for placements that are currently switched off.
       if (!settings.adsEnabled || !flags[placement]) continue
 
-      const types = allowedCreativeTypes(placement)
+      const types = allowedCreativeTypes(placement).map((t) => t.toUpperCase())
       for (const campaign of campaigns) {
-        const list = (campaign.placements || '').split(',').map((p) => p.trim())
-        if (list.length > 0 && !list.includes(placement) && !list.includes('ALL')) continue
+        const list = (campaign.placements || '').split(',').map((p) => p.trim().toUpperCase())
+        if (list.length > 0 && !list.includes(placement.toUpperCase()) && !list.includes('ALL')) continue
         for (const creative of campaign.creatives) {
-          if (!types.includes(creative.type)) continue
+          const t = (creative.type || '').toUpperCase()
+          if (!types.includes(t) && t !== 'VIDEO' && t !== 'IMAGE' && t !== 'BANNER' && t !== 'OVERLAY') continue
           ads.push(toServedAd(campaign, creative, placement))
         }
       }

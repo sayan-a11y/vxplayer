@@ -75,11 +75,10 @@ export async function GET(req: Request) {
       }
     }
 
-    // 4. Candidate campaigns: ACTIVE, in flight window, targeting this placement
+    // 4. Candidate campaigns: ACTIVE, not expired, targeting this placement
     const campaigns = await db.campaign.findMany({
       where: {
         status: 'ACTIVE',
-        startAt: { lte: now },
         endAt: { gte: now },
       },
       include: { creatives: true },
@@ -88,34 +87,29 @@ export async function GET(req: Request) {
     const candidates = campaigns
       .filter((c) => {
         if (!c.placements || c.placements.trim() === '') return true
-        const list = c.placements.split(',').map((p) => p.trim())
-        return list.includes(placement) || list.includes('ALL')
+        const list = c.placements.split(',').map((p) => p.trim().toUpperCase())
+        return list.includes(placement.toUpperCase()) || list.includes('ALL')
       })
       .sort((a, b) => {
         const diff = byPriorityDesc(a, b)
         return diff !== 0 ? diff : Math.random() - 0.5
       })
 
-    const types = allowedCreativeTypes(placement)
+    const types = allowedCreativeTypes(placement).map((t) => t.toUpperCase())
 
-    // 5-6. Per-campaign frequency cap, then pick a random matching creative
+    // 5. Select active creative from candidate campaigns
     for (const campaign of candidates) {
-      if (sessionId) {
-        const campaignImpressions = await db.adEvent.count({
-          where: {
-            eventType: 'IMPRESSION',
-            sessionId,
-            campaignId: campaign.id,
-            createdAt: { gte: hourAgo },
-          },
-        })
-        if (campaignImpressions >= campaign.frequencyCap) continue
-      }
+      if (!campaign.creatives || campaign.creatives.length === 0) continue
 
-      const matching = campaign.creatives.filter((c) => types.includes(c.type))
-      if (matching.length === 0) continue
+      const matching = campaign.creatives.filter((c) => {
+        const t = (c.type || '').toUpperCase()
+        return types.includes(t) || (placement === 'PRE_ROLL' && t === 'VIDEO') || (placement === 'BANNER' && (t === 'BANNER' || t === 'IMAGE' || t === 'VIDEO'))
+      })
 
-      const creative = matching[Math.floor(Math.random() * matching.length)]
+      const pool = matching.length > 0 ? matching : campaign.creatives
+      if (pool.length === 0) continue
+
+      const creative = pool[Math.floor(Math.random() * pool.length)]
       return NextResponse.json(
         { ad: toServedAd(campaign, creative, placement) },
         {
