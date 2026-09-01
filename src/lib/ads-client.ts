@@ -1,6 +1,6 @@
 'use client'
 
-// Client-side ad engine: High-performance instant rendering + offline cache + real-time server sync
+// Client-side ad engine: High-performance instant rendering + offline manifest + real-time server sync
 
 import type {
   AdCacheBundle,
@@ -12,85 +12,51 @@ import type {
 } from '@/lib/types'
 import { apiGet, apiPost } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
+import {
+  flushOfflineAdEvents,
+  preloadAdAsset,
+  recordAdEventOffline,
+  selectAdFromManifest,
+  syncAdManifest,
+} from './ad-manifest'
 
-const CACHE_KEY = 'vx_ad_cache'
+export { syncAdManifest, flushOfflineAdEvents, preloadAdAsset }
 
-// ── Offline / Instant Local Cache ──
+export function clearCache() {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem('vx_ad_manifest_v2')
+  window.localStorage.removeItem('vx_ad_cache')
+}
 
 export function readCache(): AdCacheBundle | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.localStorage.getItem(CACHE_KEY)
+    const raw = window.localStorage.getItem('vx_ad_manifest_v2')
     if (!raw) return null
-    const bundle = JSON.parse(raw) as AdCacheBundle
-    if (!bundle || !Array.isArray(bundle.ads)) return null
-    return bundle
+    const manifest = JSON.parse(raw)
+    return {
+      version: manifest.version || 1,
+      expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      ads: manifest.ads || [],
+    }
   } catch {
     return null
   }
 }
 
-export function writeCache(bundle: AdCacheBundle) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(bundle))
-  } catch {
-    /* storage full — ignore */
-  }
-}
-
-export function clearCache() {
-  if (typeof window === 'undefined') return
-  window.localStorage.removeItem(CACHE_KEY)
-}
-
-/** Prefetch/refresh the offline ad cache (called on app mount in background). */
 export async function refreshAdCache(force = false): Promise<void> {
-  if (typeof window === 'undefined') return
-  const existing = readCache()
-  if (!force && existing && new Date(existing.expiresAt).getTime() > Date.now()) return
-  try {
-    const bundle = await apiGet<AdCacheBundle>('/api/ads/cache')
-    if (bundle && Array.isArray(bundle.ads)) {
-      writeCache(bundle)
-    }
-  } catch {
-    /* offline — keep existing cache */
-  }
+  await syncAdManifest(force)
 }
 
-/** Drop cached ads whose bundle version no longer matches server settings (admin cleared cache). */
 export function isCacheStale(settings: SettingsDTO | null): boolean {
+  if (!settings) return false
   const cache = readCache()
   if (!cache) return true
-  if (settings && cache.version !== settings.adCacheVersion) return true
-  return new Date(cache.expiresAt).getTime() <= Date.now()
+  return cache.version !== settings.adCacheVersion
 }
-
-// ── Synchronous Instant Cache Picker (0ms) ──
 
 export function getCachedAd(placement: AdPlacement): ServedAd | null {
-  const cache = readCache()
-  if (!cache || !Array.isArray(cache.ads)) return null
-  if (new Date(cache.expiresAt).getTime() <= Date.now()) return null
-
-  const store = useAppStore.getState()
-  if (store.settings && !store.settings.adsEnabled) return null
-
-  const pool = cache.ads.filter((a) => a.placement === placement)
-  if (pool.length === 0) return null
-
-  const priorityRank: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
-  pool.sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3))
-  return pool[0]
-}
-
-function pickFromBundle(ads: ServedAd[], placement: AdPlacement): ServedAd | null {
-  const pool = ads.filter((a) => a.placement === placement)
-  if (pool.length === 0) return null
-  const priorityRank: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
-  pool.sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3))
-  return pool[0]
+  return selectAdFromManifest(placement)
 }
 
 export type ServeParams = {
@@ -100,9 +66,10 @@ export type ServeParams = {
 }
 
 /**
- * Fast ad request:
- * Returns instant cached ad (0ms) while checking server in background,
- * or fetches directly from /api/ads/serve.
+ * High-performance ad request:
+ * 1. Checks Local Ad Manifest FIRST for 0ms immediate resolution.
+ * 2. If no local ad is found and online, performs a fast non-blocking fetch with strict 1.2s timeout.
+ * 3. Never keeps the video player waiting indefinitely.
  */
 export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
   const store = useAppStore.getState()
@@ -111,14 +78,21 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
 
   if (settings && !settings.adsEnabled) return null
 
-  // Check instant cache first
-  const cached = getCachedAd(params.placement)
-
-  if (store.offlineMode) {
-    if (settings && settings.offlineAdFallback === 'SKIP_ADS') return null
-    return cached
+  // ── Step 1: Consult Local Ad Manifest (0ms) ──
+  const manifestAd = selectAdFromManifest(params.placement, params.videoDuration)
+  if (manifestAd) {
+    if (manifestAd.mediaUrl) {
+      preloadAdAsset(manifestAd.mediaUrl, manifestAd.type)
+    }
+    return manifestAd
   }
 
+  // If offline mode is on and not found in manifest, return null immediately
+  if (store.offlineMode || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return null
+  }
+
+  // ── Step 2: Online fast non-blocking request with timeout ──
   try {
     const q = new URLSearchParams({
       placement: params.placement,
@@ -127,29 +101,27 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
     if (params.videoId) q.set('videoId', params.videoId)
     if (params.videoDuration) q.set('videoDuration', String(params.videoDuration))
 
-    const res = await apiGet<ServeAdResponse>(`/api/ads/serve?${q.toString()}`)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 1200)
+
+    const res = await apiGet<ServeAdResponse>(`/api/ads/serve?${q.toString()}`).finally(() => {
+      clearTimeout(timer)
+    })
+
     if (res && res.ad) {
-      // Save served ad into local cache
-      const curCache = readCache() || {
-        version: 1,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        ads: [],
+      if (res.ad.mediaUrl) {
+        preloadAdAsset(res.ad.mediaUrl, res.ad.type)
       }
-      const filtered = curCache.ads.filter((a) => a.placement !== params.placement || a.creativeId !== res.ad?.creativeId)
-      writeCache({
-        ...curCache,
-        ads: [res.ad, ...filtered],
-      })
       return res.ad
     }
 
-    return cached
+    return null
   } catch {
-    return cached
+    return null
   }
 }
 
-// ── Tracking ──
+// ── Tracking with Offline Fallback ──
 
 export async function trackAdEvent(
   ad: ServedAd,
@@ -160,16 +132,39 @@ export async function trackAdEvent(
   if (eventType === 'IMPRESSION') {
     store.countImpression(ad.campaignId)
   }
+
+  const payload = {
+    campaignId: ad.campaignId,
+    creativeId: ad.creativeId,
+    placement: ad.placement,
+    eventType,
+    sessionId: store.sessionId || 'anonymous',
+    videoId,
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    recordAdEventOffline(payload)
+    return
+  }
+
   try {
-    await apiPost('/api/ads/track', {
-      campaignId: ad.campaignId,
-      creativeId: ad.creativeId,
-      placement: ad.placement,
-      eventType,
-      sessionId: store.sessionId || 'anonymous',
-      videoId,
+    await apiPost('/api/ads/track', payload).catch(() => {
+      recordAdEventOffline(payload)
     })
   } catch {
-    /* offline: analytics are aggregate-only, silently drop */
+    recordAdEventOffline(payload)
   }
+}
+
+// ── Setup Network Reconnect Listeners ──
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    void syncAdManifest()
+    void flushOfflineAdEvents()
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      void syncAdManifest()
+    }
+  })
 }

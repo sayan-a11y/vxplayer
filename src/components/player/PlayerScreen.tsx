@@ -24,7 +24,7 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
-import { requestAd, trackAdEvent } from '@/lib/ads-client'
+import { getCachedAd, preloadAdAsset, requestAd, trackAdEvent } from '@/lib/ads-client'
 import { saveLocalHistory } from '@/lib/privateLibrary'
 import { apiPost } from '@/lib/api'
 import { generateDemoCues } from '@/lib/vtt'
@@ -417,15 +417,21 @@ export default function PlayerScreen() {
     }
     store.resetMidRolls()
 
-    // PRE_ROLL on every video open
-    if (s && s.adsEnabled) {
-      setStartupGate(true)
-      requestAd({ placement: 'PRE_ROLL', videoId })
-        .then((a) => {
-          setStartupGate(false)
-          if (a) setActiveAd({ ad: a, phase: 'pre' })
-        })
-        .catch(() => setStartupGate(false))
+    // PRE_ROLL on every video open (0ms Local Manifest check first)
+    if (s && s.adsEnabled && (s.preRollEnabled ?? true)) {
+      const instantPreRoll = getCachedAd('PRE_ROLL')
+      if (instantPreRoll) {
+        setActiveAd({ ad: instantPreRoll, phase: 'pre' })
+        setStartupGate(false)
+      } else {
+        setStartupGate(true)
+        requestAd({ placement: 'PRE_ROLL', videoId })
+          .then((a) => {
+            setStartupGate(false)
+            if (a) setActiveAd({ ad: a, phase: 'pre' })
+          })
+          .catch(() => setStartupGate(false))
+      }
     } else {
       setStartupGate(false)
     }
@@ -763,31 +769,47 @@ export default function PlayerScreen() {
     if (!activeAd && !startupGate && mainStarted && !midRollFetchingRef.current) {
       const st = useAppStore.getState()
       const s = st.settings
-      if (s && s.adsEnabled && d >= (s.minMidRollDurationSec || 300)) {
+      if (s && s.adsEnabled && (s.midRollEnabled ?? true) && d >= (s.minMidRollDurationSec || 300)) {
         if (st.midRollsShown < s.maxMidRolls) {
           const last = st.lastAdAt
           if (last === null || now - last > 90_000) {
             const thresholds = MID_ROLL_THRESHOLDS[s.maxMidRolls] ?? []
             const th = thresholds[st.midRollsShown]
-            if (th !== undefined && t >= th * d) {
-              midRollFetchingRef.current = true
-              saveProgressNow()
-              requestAd({
-                placement: 'MID_ROLL',
-                videoId: video.id,
-                videoDuration: Math.floor(d),
-              })
-                .then((a) => {
+            if (th !== undefined) {
+              // Preload next mid-roll creative 30s before cue point
+              if (t >= (th - 0.05) * d && t < th * d) {
+                const instantMid = getCachedAd('MID_ROLL')
+                if (instantMid?.mediaUrl) preloadAdAsset(instantMid.mediaUrl, instantMid.type)
+              }
+              // Trigger Mid-Roll at threshold
+              if (t >= th * d) {
+                midRollFetchingRef.current = true
+                saveProgressNow()
+                const instantMid = getCachedAd('MID_ROLL')
+                if (instantMid) {
                   midRollFetchingRef.current = false
-                  if (a) {
-                    st.setLastAdAt(Date.now())
-                    st.incMidRolls()
-                    setActiveAd({ ad: a, phase: 'mid' })
-                  }
-                })
-                .catch(() => {
-                  midRollFetchingRef.current = false
-                })
+                  st.setLastAdAt(Date.now())
+                  st.incMidRolls()
+                  setActiveAd({ ad: instantMid, phase: 'mid' })
+                } else {
+                  requestAd({
+                    placement: 'MID_ROLL',
+                    videoId: video.id,
+                    videoDuration: Math.floor(d),
+                  })
+                    .then((a) => {
+                      midRollFetchingRef.current = false
+                      if (a) {
+                        st.setLastAdAt(Date.now())
+                        st.incMidRolls()
+                        setActiveAd({ ad: a, phase: 'mid' })
+                      }
+                    })
+                    .catch(() => {
+                      midRollFetchingRef.current = false
+                    })
+                }
+              }
             }
           }
         }
@@ -814,13 +836,18 @@ export default function PlayerScreen() {
     setPlaying(false)
     saveProgressNow()
     const s = useAppStore.getState().settings
-    if (s && s.adsEnabled) {
-      requestAd({ placement: 'POST_ROLL', videoId: video.id })
-        .then((a) => {
-          if (a) setActiveAd({ ad: a, phase: 'post' })
-          else afterPostRoll()
-        })
-        .catch(() => afterPostRoll())
+    if (s && s.adsEnabled && (s.postRollEnabled ?? true)) {
+      const instantPost = getCachedAd('POST_ROLL')
+      if (instantPost) {
+        setActiveAd({ ad: instantPost, phase: 'post' })
+      } else {
+        requestAd({ placement: 'POST_ROLL', videoId: video.id })
+          .then((a) => {
+            if (a) setActiveAd({ ad: a, phase: 'post' })
+            else afterPostRoll()
+          })
+          .catch(() => afterPostRoll())
+      }
     } else {
       afterPostRoll()
     }
