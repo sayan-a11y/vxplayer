@@ -7,15 +7,19 @@ const globalForPrisma = globalThis as unknown as {
   schemaInitialized?: boolean
 }
 
+const SUPABASE_DB_URL =
+  'postgresql://postgres.iypddnhvedcumpclkrxv:VXPlayer%402026Db@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true'
+
 function getDatabaseUrl(): string {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL
-  return 'postgresql://postgres.iypddnhvedcumpclkrxv:VXPlayer%402026Db@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true'
+  const envUrl = process.env.DATABASE_URL?.trim()
+  if (envUrl && (envUrl.startsWith('postgresql://') || envUrl.startsWith('postgres://'))) {
+    return envUrl
+  }
+  return SUPABASE_DB_URL
 }
 
 const resolvedDbUrl = getDatabaseUrl()
-if (resolvedDbUrl) {
-  process.env.DATABASE_URL = resolvedDbUrl
-}
+process.env.DATABASE_URL = resolvedDbUrl
 
 export const db =
   globalForPrisma.prisma ??
