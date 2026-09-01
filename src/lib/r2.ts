@@ -4,6 +4,7 @@ import {
   DeleteObjectCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import fs from 'fs'
 import path from 'path'
 
@@ -160,11 +161,9 @@ export async function createR2PresignedUpload(
   const resolvedContentType = contentType || getMimeType(key)
 
   try {
-    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner')
     const command = new PutObjectCommand({
       Bucket: config.bucketName,
       Key: key,
-      ContentType: resolvedContentType,
     })
 
     const uploadUrl = await getSignedUrl(client, command, { expiresIn })

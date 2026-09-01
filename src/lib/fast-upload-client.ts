@@ -94,13 +94,13 @@ export async function fastUploadFile({
             'PUT',
             presignData.uploadUrl,
             file,
-            { 'Content-Type': file.type || 'video/mp4' },
+            file.type ? { 'Content-Type': file.type } : {},
             (loaded) => onProgress?.(Math.min(95, Math.round((loaded / file.size) * 100)))
           )
 
           if (res.status >= 200 && res.status < 300) {
             onProgress?.(98)
-            // Register video in Supabase
+            // Register video in Supabase PostgreSQL
             const regRes = await fetch('/api/videos/register', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -111,9 +111,11 @@ export async function fastUploadFile({
               }),
             })
             if (regRes.ok) {
-              const regData = (await regRes.json()) as { video?: unknown }
-              onProgress?.(100)
-              return (regData as Record<string, unknown>) ?? { video: regData.video }
+              const regData = (await regRes.json()) as { video?: unknown; duplicate?: boolean }
+              if (regData && regData.video) {
+                onProgress?.(100)
+                return regData as unknown as FastUploadResult
+              }
             }
           }
         }
