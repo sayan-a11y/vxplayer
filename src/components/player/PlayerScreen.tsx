@@ -417,8 +417,14 @@ export default function PlayerScreen() {
     }
     store.resetMidRolls()
 
-    // PRE_ROLL on every video open (0ms Local Manifest check first)
-    if (s && s.adsEnabled && (s.preRollEnabled ?? true)) {
+    // PRE_ROLL on every video open.
+    // IMPORTANT: settings may be null on first mount (loaded async).
+    // We attempt the ad unless settings are EXPLICITLY disabled.
+    const adsExplicitlyOff = s !== null && s !== undefined && s.adsEnabled === false
+    const preRollExplicitlyOff = s !== null && s !== undefined && s.preRollEnabled === false
+
+    if (!adsExplicitlyOff && !preRollExplicitlyOff) {
+      // Check 0ms local manifest first
       const instantPreRoll = getCachedAd('PRE_ROLL')
       if (instantPreRoll) {
         setActiveAd({ ad: instantPreRoll, phase: 'pre' })
@@ -769,11 +775,15 @@ export default function PlayerScreen() {
     if (!activeAd && !startupGate && mainStarted && !midRollFetchingRef.current) {
       const st = useAppStore.getState()
       const s = st.settings
-      if (s && s.adsEnabled && (s.midRollEnabled ?? true) && d >= (s.minMidRollDurationSec || 300)) {
-        if (st.midRollsShown < s.maxMidRolls) {
+      // Allow ads when settings is null (not yet loaded) unless EXPLICITLY disabled
+      const midAdsOff = s !== null && s !== undefined && (s.adsEnabled === false || s.midRollEnabled === false)
+      const minDur = s?.minMidRollDurationSec ?? 90
+      const maxMid = s?.maxMidRolls ?? 2
+      if (!midAdsOff && d >= minDur) {
+        if (st.midRollsShown < maxMid) {
           const last = st.lastAdAt
           if (last === null || now - last > 90_000) {
-            const thresholds = MID_ROLL_THRESHOLDS[s.maxMidRolls] ?? []
+            const thresholds = MID_ROLL_THRESHOLDS[maxMid] ?? []
             const th = thresholds[st.midRollsShown]
             if (th !== undefined) {
               // Preload next mid-roll creative 30s before cue point
@@ -836,7 +846,9 @@ export default function PlayerScreen() {
     setPlaying(false)
     saveProgressNow()
     const s = useAppStore.getState().settings
-    if (s && s.adsEnabled && (s.postRollEnabled ?? true)) {
+    // Attempt post-roll unless EXPLICITLY disabled (null settings = allowed)
+    const postAdsOff = s !== null && s !== undefined && (s.adsEnabled === false || s.postRollEnabled === false)
+    if (!postAdsOff) {
       const instantPost = getCachedAd('POST_ROLL')
       if (instantPost) {
         setActiveAd({ ad: instantPost, phase: 'post' })

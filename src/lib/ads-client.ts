@@ -68,7 +68,7 @@ export type ServeParams = {
 /**
  * High-performance ad request:
  * 1. Checks Local Ad Manifest FIRST for 0ms immediate resolution.
- * 2. If no local ad is found and online, performs a fast non-blocking fetch with strict 1.2s timeout.
+ * 2. If no local ad found and online, fetches from server with 3s timeout.
  * 3. Never keeps the video player waiting indefinitely.
  */
 export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
@@ -76,7 +76,8 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
   const sessionId = store.sessionId || 'anonymous'
   const settings = store.settings
 
-  if (settings && !settings.adsEnabled) return null
+  // Only skip if ads are EXPLICITLY disabled (never skip when settings is null)
+  if (settings !== null && settings !== undefined && settings.adsEnabled === false) return null
 
   // ── Step 1: Consult Local Ad Manifest (0ms) ──
   const manifestAd = selectAdFromManifest(params.placement, params.videoDuration)
@@ -92,7 +93,7 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
     return null
   }
 
-  // ── Step 2: Online fast non-blocking request with timeout ──
+  // ── Step 2: Online fetch with 3s timeout ──
   try {
     const q = new URLSearchParams({
       placement: params.placement,
@@ -102,7 +103,7 @@ export async function requestAd(params: ServeParams): Promise<ServedAd | null> {
     if (params.videoDuration) q.set('videoDuration', String(params.videoDuration))
 
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 1200)
+    const timer = setTimeout(() => controller.abort(), 3000)
 
     const res = await apiGet<ServeAdResponse>(`/api/ads/serve?${q.toString()}`).finally(() => {
       clearTimeout(timer)
