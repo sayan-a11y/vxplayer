@@ -51,7 +51,12 @@ export async function GET(req: Request) {
       sessions: sum((s) => s.playbackSessions),
     }
 
-    const campaignMeta = new Map(campaigns.map((c) => [c.id, c]))
+    const campaignMeta = new Map<string, { id: string; name: string; advertiser: string }>()
+    for (const c of (campaigns as { id: string; name: string; advertiser: string }[])) {
+      if (c && typeof c.id === 'string') {
+        campaignMeta.set(c.id, c)
+      }
+    }
     const perCampaign = new Map<
       string,
       { impressions: number; completions: number; skips: number; starts: number }

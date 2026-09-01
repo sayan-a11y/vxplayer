@@ -85,12 +85,18 @@ export async function GET(req: Request) {
       .sort((a, b) => b.impressions - a.impressions)
 
     // ── Per-campaign performance ──
-    const campaignNameById = new Map(campaigns.map((c) => [c.id, c.name]))
+    const campaignNameById = new Map<string, string>()
+    for (const c of (campaigns as { id: string; name: string }[])) {
+      if (c && typeof c.id === 'string') {
+        campaignNameById.set(c.id, c.name ?? 'Campaign')
+      }
+    }
     const campaignMap = new Map<
       string,
       { impressions: number; starts: number; completions: number; skips: number }
     >()
     for (const g of campaignGroups) {
+      if (!g.campaignId) continue
       const entry =
         campaignMap.get(g.campaignId) ?? { impressions: 0, starts: 0, completions: 0, skips: 0 }
       if (g.eventType === 'IMPRESSION') entry.impressions += g._count._all
