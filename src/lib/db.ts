@@ -101,6 +101,94 @@ export async function ensureSchema(): Promise<void> {
       }
     }
 
+    // 3. Ensure baseline active campaigns & creatives exist so all placements are active immediately on website open
+    const activeCampaignCount = await db.campaign.count({ where: { status: 'ACTIVE' } }).catch(() => 0)
+    if (activeCampaignCount === 0) {
+      const now = new Date()
+      const endYear = new Date(now.getFullYear() + 5, 11, 31)
+
+      // 1. Home & Browse Placements Campaign (Hero, Feed, Cards, Banner, Footer)
+      await db.campaign.create({
+        data: {
+          name: 'VX Player Showcase Campaign',
+          advertiser: 'VX Player',
+          status: 'ACTIVE',
+          priority: 'HIGH',
+          startAt: now,
+          endAt: endYear,
+          frequencyCap: 20,
+          placements: 'HERO,HOME_FEED,BETWEEN_CARDS,BANNER,FOOTER',
+          creatives: {
+            create: [
+              {
+                name: '4K Ultra HD Showcase',
+                type: 'IMAGE',
+                mediaUrl: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=1200&auto=format&fit=crop',
+                duration: 15,
+                skipAfter: 5,
+                headline: 'Experience Pure 4K HDR Media',
+                bodyText: 'Hardware-accelerated zero buffering offline video playback.',
+                ctaText: 'Explore Features',
+                ctaUrl: 'https://vxplayer.com',
+              },
+              {
+                name: 'Dolby Atmos Audio',
+                type: 'BANNER',
+                mediaUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1200&auto=format&fit=crop',
+                duration: 15,
+                skipAfter: 5,
+                headline: 'Immersive Surround Sound',
+                bodyText: 'Crystal clear audio with multi-channel track support.',
+                ctaText: 'Learn More',
+                ctaUrl: 'https://vxplayer.com',
+              },
+            ],
+          },
+        },
+      }).catch(() => null)
+
+      // 2. Player Placements Campaign (Pre-Roll, Mid-Roll, Post-Roll, Overlays, Up Next, Player Bottom)
+      await db.campaign.create({
+        data: {
+          name: 'VX Pro Playback Experience',
+          advertiser: 'VX Pro',
+          status: 'ACTIVE',
+          priority: 'HIGH',
+          startAt: now,
+          endAt: endYear,
+          frequencyCap: 20,
+          placements: 'PRE_ROLL,MID_ROLL,POST_ROLL,VIDEO_OVERLAY,IMAGE_OVERLAY,UP_NEXT,PLAYER_BOTTOM,OVERLAY',
+          creatives: {
+            create: [
+              {
+                name: 'VX Pro Stream Spot',
+                type: 'VIDEO',
+                mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+                duration: 15,
+                skipAfter: 5,
+                headline: 'Play Any Format, Anywhere',
+                bodyText: 'Supports MP4, MKV, AVI, MOV, WebM with multi-track subtitles.',
+                ctaText: 'Get Pro',
+                ctaUrl: 'https://vxplayer.com',
+              },
+              {
+                name: 'In-Player Overlay Banner',
+                type: 'IMAGE',
+                position: 'BOTTOM',
+                mediaUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=800&auto=format&fit=crop',
+                duration: 12,
+                skipAfter: 5,
+                headline: 'Next-Gen Media Engine',
+                bodyText: 'Smooth gesture controls, multi-track audio & background pip.',
+                ctaText: 'Try Now',
+                ctaUrl: 'https://vxplayer.com',
+              },
+            ],
+          },
+        },
+      }).catch(() => null)
+    }
+
     globalForPrisma.schemaInitialized = true
   } catch (err) {
     console.warn('Database ensureSchema notice:', err)
