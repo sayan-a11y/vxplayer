@@ -102,13 +102,26 @@ function emptyForm(): CampaignForm {
   return {
     name: '',
     advertiser: '',
-    status: 'DRAFT',
+    status: 'ACTIVE',
     startAt: isoDay(0),
     endAt: isoDay(30),
-    priority: 'MEDIUM',
-    frequencyCap: 2,
-    placements: ['PRE_ROLL'],
-    creatives: [],
+    priority: 'HIGH',
+    frequencyCap: 6,
+    placements: ['BANNER', 'PRE_ROLL'],
+    creatives: [
+      {
+        name: 'Main Creative',
+        type: 'BANNER',
+        mediaUrl: '',
+        duration: 15,
+        skipAfter: 5,
+        position: 'BOTTOM',
+        headline: 'Featured Promo',
+        bodyText: 'Watch exclusive trailers & movies',
+        ctaText: 'Learn More',
+        ctaUrl: 'https://vxplayer.com',
+      },
+    ],
   }
 }
 
@@ -247,21 +260,30 @@ export default function CampaignsView() {
       return
     }
     setSaving(true)
+    let startIso = new Date().toISOString()
+    let endIso = new Date(Date.now() + 30 * 864e5).toISOString()
+    try {
+      if (form.startAt) startIso = new Date(`${form.startAt}T00:00:00`).toISOString()
+    } catch {}
+    try {
+      if (form.endAt) endIso = new Date(`${form.endAt}T23:59:59`).toISOString()
+    } catch {}
+
     const payload = {
-      name: form.name.trim(),
-      advertiser: form.advertiser.trim(),
-      status: form.status,
-      priority: form.priority,
-      frequencyCap: Number(form.frequencyCap) || 0,
-      startAt: new Date(`${form.startAt}T00:00:00`).toISOString(),
-      endAt: new Date(`${form.endAt}T23:59:59`).toISOString(),
-      placements: form.placements,
+      name: form.name.trim() || 'New Campaign',
+      advertiser: form.advertiser.trim() || 'Advertiser',
+      status: form.status || 'ACTIVE',
+      priority: form.priority || 'HIGH',
+      frequencyCap: Number(form.frequencyCap) || 6,
+      startAt: startIso,
+      endAt: endIso,
+      placements: form.placements.length ? form.placements : ['BANNER', 'PRE_ROLL'],
       creatives: form.creatives.map((c) => ({
-        name: c.name.trim(),
-        type: c.type,
+        name: c.name.trim() || 'Ad Creative',
+        type: c.type || 'BANNER',
         mediaUrl: c.mediaUrl.trim() || null,
-        duration: Number(c.duration) || 0,
-        skipAfter: Number.isFinite(c.skipAfter) ? c.skipAfter : -1,
+        duration: Number(c.duration) || 15,
+        skipAfter: Number.isFinite(c.skipAfter) ? c.skipAfter : 5,
         position: c.position === 'NONE' ? null : c.position,
         headline: c.headline.trim() || null,
         bodyText: c.bodyText.trim() || null,
