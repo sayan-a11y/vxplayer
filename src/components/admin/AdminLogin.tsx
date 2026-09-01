@@ -146,14 +146,16 @@ export default function AdminLogin() {
         {/* Branding Header */}
         <div className="flex flex-col items-center text-center">
           <div className="relative mb-2">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-500 text-2xl font-black text-white shadow-lg shadow-violet-500/25">
-              VX
-            </div>
-            <div className="absolute -bottom-1 -right-1 rounded-full bg-emerald-500 p-1 text-black">
+            <img
+              src="/logo.png"
+              alt="VX Player"
+              className="h-14 sm:h-16 w-auto max-w-[240px] object-contain drop-shadow-xl"
+            />
+            <div className="absolute -bottom-1 -right-1 rounded-full bg-emerald-500 p-1 text-black shadow">
               <ShieldCheck className="h-3.5 w-3.5" />
             </div>
           </div>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">
+          <h1 className="mt-3 text-xl sm:text-2xl font-bold tracking-tight text-white">
             Admin Security Console
           </h1>
           <p className="mt-1 text-xs text-white/50">

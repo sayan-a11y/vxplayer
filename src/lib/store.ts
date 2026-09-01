@@ -183,19 +183,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   registerLogoTap: () => {
     const now = Date.now()
     const { tapCount, lastTapAt } = get()
-    // consecutive taps within 2.5s window
-    if (now - lastTapAt > 2500) {
+    // consecutive taps within 3.5s window
+    if (now - lastTapAt > 3500) {
       set({ tapCount: 1, lastTapAt: now })
       return
     }
     const next = tapCount + 1
-    set({ tapCount: next, lastTapAt: now })
     if (next >= 7) {
-      set({ tapCount: 0 })
-      set({ adminView: 'login' })
+      set({ tapCount: 0, lastTapAt: 0, adminView: 'login' })
+    } else {
+      set({ tapCount: next, lastTapAt: now })
     }
   },
-  resetTaps: () => set({ tapCount: 0 }),
+  resetTaps: () => set({ tapCount: 0, lastTapAt: 0 }),
 }))
 
 /** init client-side session id + stored admin token once on app mount */

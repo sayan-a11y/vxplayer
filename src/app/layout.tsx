@@ -20,7 +20,9 @@ export const metadata: Metadata = {
   keywords: ["VX Player", "video player", "offline", "subtitles", "playlists"],
   authors: [{ name: "VX Player" }],
   icons: {
-    icon: "/thumbs/vx_logo.png",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
   openGraph: {
     title: "VX Player",

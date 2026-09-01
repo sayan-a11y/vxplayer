@@ -200,13 +200,15 @@ export default function AdminApp() {
     <div className="vx-root flex h-screen overflow-hidden">
       {/* ── Sidebar (tablet / desktop) ── */}
       <aside className="vx-panel hidden w-64 shrink-0 flex-col rounded-none border-y-0 border-l-0 lg:flex">
-        <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
-          <div className="vx-btn-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold">
-            VX
-          </div>
-          <div className="text-sm font-bold tracking-tight text-white">
-            VX <span className="vx-accent-text">ADMIN</span>
-          </div>
+        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+          <img
+            src="/logo.png"
+            alt="VX Player"
+            className="h-8 w-auto max-w-[140px] object-contain drop-shadow"
+          />
+          <span className="vx-chip border-[var(--vx-accent)]/40 bg-[var(--vx-accent)]/15 text-[10px] font-bold text-[var(--vx-accent-soft)]">
+            ADMIN
+          </span>
         </div>
 
         <div className="border-b border-white/[0.07] px-5 py-3">
@@ -287,11 +289,15 @@ export default function AdminApp() {
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
         <SheetContent side="left" className="vx-scroll w-72 max-w-[85vw] overflow-y-auto rounded-none border-y-0 border-l-0 border-white/[0.07] bg-[#0a0b1c] p-0">
           <SheetHeader className="border-b border-white/[0.07] px-5 py-4 text-left">
-            <SheetTitle className="flex items-center gap-3 text-sm font-bold tracking-tight text-white">
-              <span className="vx-btn-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-black">
-                VX
+            <SheetTitle className="flex items-center justify-between text-sm font-bold tracking-tight text-white">
+              <img
+                src="/logo.png"
+                alt="VX Player"
+                className="h-8 w-auto max-w-[140px] object-contain drop-shadow"
+              />
+              <span className="vx-chip border-[var(--vx-accent)]/40 bg-[var(--vx-accent)]/15 text-[10px] font-bold text-[var(--vx-accent-soft)]">
+                ADMIN
               </span>
-              VX <span className="vx-accent-text">ADMIN</span>
             </SheetTitle>
             <SheetDescription className="sr-only">Admin panel navigation</SheetDescription>
           </SheetHeader>

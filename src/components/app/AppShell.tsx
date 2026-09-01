@@ -185,12 +185,11 @@ export function AppShell() {
     await importVideoFiles(Array.from(files))
   }
 
-  // Auto-hide the "taps to admin" chip 2.5s after the last tap.
-  // The store keeps its own consecutive-tap counting — this only controls visibility.
+  // Auto-hide the "taps to admin" chip 3.5s after the last tap.
   useEffect(() => {
-    if (tapCount >= 3 && tapCount < 7) {
+    if (tapCount >= 2 && tapCount < 7) {
       setTapChipVisible(true)
-      const timer = window.setTimeout(() => setTapChipVisible(false), 2500)
+      const timer = window.setTimeout(() => setTapChipVisible(false), 3500)
       return () => window.clearTimeout(timer)
     }
     setTapChipVisible(false)
@@ -207,29 +206,21 @@ export function AppShell() {
             <button
               type="button"
               onClick={registerLogoTap}
-              aria-label="VX Player home — admin access"
-              className="flex min-h-11 items-center gap-2 rounded-xl px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60"
+              aria-label="VX Player — tap 7 times for admin access"
+              className="flex min-h-11 items-center gap-2 rounded-xl px-1 py-1 outline-none transition active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60"
             >
-              <span
-                aria-hidden="true"
-                className="vx-glow grid size-9 shrink-0 place-items-center rounded-xl text-sm font-black tracking-tight text-white"
-                style={{ background: 'linear-gradient(135deg, var(--vx-accent), #ec4899)' }}
-              >
-                VX
-              </span>
-              <span className="min-w-0 text-left leading-tight">
-                <span className="block text-[15px] font-bold tracking-tight">VX Player</span>
-                <span className="hidden text-[10px] text-muted-foreground sm:block">
-                  Play Everything. Anywhere. Offline.
-                </span>
-              </span>
+              <img
+                src="/logo.png"
+                alt="VX Player"
+                className="h-8 sm:h-9 w-auto max-w-[160px] sm:max-w-[210px] object-contain drop-shadow"
+              />
             </button>
-            {tapChipVisible && tapCount >= 3 && tapCount < 7 && (
+            {tapChipVisible && tapCount >= 2 && tapCount < 7 && (
               <span
-                className="vx-chip shrink-0 border-[var(--vx-accent)]/40 bg-[var(--vx-accent)]/10 text-[10px] font-medium text-[var(--vx-accent-soft)]"
+                className="vx-chip shrink-0 animate-pulse border-[var(--vx-accent)]/40 bg-[var(--vx-accent)]/15 text-[10px] font-semibold text-[var(--vx-accent-soft)]"
                 role="status"
               >
-                {7 - tapCount} taps to admin
+                {7 - tapCount} taps to Admin
               </span>
             )}
           </div>
