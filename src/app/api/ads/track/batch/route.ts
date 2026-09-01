@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db, ensureSchema } from '@/lib/db'
-import { isAdEventType, isAdPlacement } from '../serve/eligibility'
+import { isAdEventType, isAdPlacement } from '@/app/api/ads/serve/eligibility'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
