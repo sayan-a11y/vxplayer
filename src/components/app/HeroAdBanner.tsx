@@ -96,7 +96,7 @@ export function HeroAdBanner() {
             muted
             loop
             playsInline
-            preload="metadata"
+            preload="auto"
             onPlay={handleFirstPlay}
             aria-label={ad.headline ?? 'Advertisement video'}
             className="absolute inset-0 h-full w-full object-cover"
@@ -107,7 +107,7 @@ export function HeroAdBanner() {
             alt={ad.headline ?? 'Advertisement'}
             fill
             priority
-            quality={85}
+            quality={95}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 92vw, 1200px"
             className="object-cover"
           />

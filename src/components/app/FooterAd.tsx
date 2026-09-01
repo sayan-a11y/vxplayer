@@ -96,7 +96,7 @@ export function FooterAd() {
             muted
             loop
             playsInline
-            preload="metadata"
+            preload="auto"
             onPlay={handleFirstPlay}
             aria-label={ad.headline ?? 'Advertisement video'}
             className="absolute inset-0 h-full w-full object-cover"

@@ -145,6 +145,7 @@ export default function AdOverlay({ ad, phase, videoId, onComplete }: AdOverlayP
           src={ad.mediaUrl ?? undefined}
           autoPlay
           playsInline
+          preload="auto"
           className="h-full w-full object-contain"
           onPlay={() => fire('START')}
           onEnded={() => complete(false)}
