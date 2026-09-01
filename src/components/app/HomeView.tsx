@@ -6,11 +6,8 @@ import { motion } from 'framer-motion'
 import {
   ChevronRight,
   Clapperboard,
-  Clock3,
   Film,
-  FolderOpen,
   FolderSearch,
-  Heart,
   History,
   ListVideo,
   RefreshCw,
@@ -20,7 +17,7 @@ import {
 import { toast } from 'sonner'
 
 import { apiGet } from '@/lib/api'
-import { formatDuration, formatSize } from '@/lib/format'
+import { formatDuration } from '@/lib/format'
 import { requestVideoPick } from '@/lib/import-client'
 import { useAppStore } from '@/lib/store'
 import type { PlaylistDTO, VideoDTO } from '@/lib/types'
@@ -30,19 +27,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 import { HeroAdBanner } from './HeroAdBanner'
 import { VideoCard } from './VideoCard'
-
-type FolderCard = { name: string; count: number; sizeMB: number }
-
-function buildFolderCards(videos: VideoDTO[]): FolderCard[] {
-  const map = new Map<string, FolderCard>()
-  for (const v of videos) {
-    const entry = map.get(v.folder) ?? { name: v.folder, count: 0, sizeMB: 0 }
-    entry.count += 1
-    entry.sizeMB += v.sizeMB
-    map.set(v.folder, entry)
-  }
-  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
-}
 
 const byRecentAdded = (a: VideoDTO, b: VideoDTO) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
 const byRecentPlayed = (a: VideoDTO, b: VideoDTO) =>
@@ -149,7 +133,6 @@ export function HomeView() {
   const dataVersion = useAppStore((s) => s.dataVersion)
   const setView = useAppStore((s) => s.setView)
   const setLibrarySort = useAppStore((s) => s.setLibrarySort)
-  const setActiveFolder = useAppStore((s) => s.setActiveFolder)
 
   const [videos, setVideos] = useState<VideoDTO[] | null>(null)
   const [playlists, setPlaylists] = useState<PlaylistDTO[] | null>(null)
@@ -234,9 +217,6 @@ export function HomeView() {
     .filter((v) => v.history && v.history.watchedPct > 0 && v.history.watchedPct < 95)
     .sort(byRecentPlayed)
   const recentlyAdded = [...videos].sort(byRecentAdded).slice(0, 10)
-  const recentlyPlayed = videos.filter((v) => v.history).sort(byRecentPlayed).slice(0, 10)
-  const favorites = videos.filter((v) => v.favorite)
-  const folderCards = buildFolderCards(videos)
 
   return (
     <div>
@@ -273,33 +253,6 @@ export function HomeView() {
           </Scroller>
         </Section>
 
-        {recentlyPlayed.length > 0 && (
-          <Section
-            title="Recently Played"
-            icon={Clock3}
-            onSeeAll={() => {
-              setLibrarySort('recent_played')
-              setView('videos')
-            }}
-          >
-            <Scroller>
-              {recentlyPlayed.map((v) => (
-                <VideoCard key={v.id} video={v} variant="wide" queue={recentlyPlayed} />
-              ))}
-            </Scroller>
-          </Section>
-        )}
-
-        {favorites.length > 0 && (
-          <Section title="Favorites" icon={Heart} onSeeAll={() => setView('favorites')}>
-            <Scroller>
-              {favorites.map((v) => (
-                <VideoCard key={v.id} video={v} variant="wide" queue={favorites} />
-              ))}
-            </Scroller>
-          </Section>
-        )}
-
         {playlists.length > 0 && (
           <Section title="Playlists" icon={ListVideo} onSeeAll={() => setView('playlists')}>
             <Scroller>
@@ -318,34 +271,6 @@ export function HomeView() {
                 </button>
               ))}
             </Scroller>
-          </Section>
-        )}
-
-        {folderCards.length > 0 && (
-          <Section title="Folders" icon={FolderOpen} onSeeAll={() => setView('folders')}>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {folderCards.map((f) => (
-                <button
-                  key={f.name}
-                  type="button"
-                  onClick={() => {
-                    setActiveFolder(f.name)
-                    setView('folders')
-                  }}
-                  className="vx-card flex items-center gap-3 p-3.5 text-left transition hover:border-[var(--vx-accent)]/40 hover:bg-white/[0.06]"
-                >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--vx-accent)]/15 text-[var(--vx-accent-soft)]">
-                    <FolderOpen className="size-5" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{f.name}</span>
-                    <span className="block text-[11px] tabular-nums text-muted-foreground">
-                      {f.count} videos • {formatSize(f.sizeMB)}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
           </Section>
         )}
 

@@ -1,8 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
@@ -16,12 +15,12 @@ type OverlayAdProps = {
 /**
  * Non-blocking overlay ad (banner-style). Position follows ad.position.
  * The wrapper never intercepts pointer events — only the card itself does,
- * so center player controls stay fully usable.
+ * so center player controls stay fully usable. Non-closable by the user;
+ * auto-dismisses after the ad duration.
  * IMPRESSION is tracked by PlayerScreen when the overlay is shown; this
  * component tracks CLICK only.
  */
 export default function OverlayAd({ ad, videoId, onClose }: OverlayAdProps) {
-  const [closeCountdown, setCloseCountdown] = useState(ad.skipAfter > 0 ? ad.skipAfter : 0)
   const closedRef = useRef(false)
 
   const close = useCallback(() => {
@@ -36,16 +35,6 @@ export default function OverlayAd({ ad, videoId, onClose }: OverlayAdProps) {
     return () => window.clearTimeout(t)
   }, [ad, close])
 
-  // close X unlocks after ad.skipAfter seconds
-  useEffect(() => {
-    if (ad.skipAfter <= 0) return
-    const iv = window.setInterval(() => {
-      setCloseCountdown((c) => Math.max(0, c - 1))
-    }, 1000)
-    return () => window.clearInterval(iv)
-  }, [ad.skipAfter])
-
-  const canClose = ad.skipAfter !== -1 && closeCountdown <= 0
   const pos = ad.position ?? 'BOTTOM'
   const wrapperCls =
     pos === 'TOP'
@@ -73,22 +62,11 @@ export default function OverlayAd({ ad, videoId, onClose }: OverlayAdProps) {
     </button>
   ) : null
 
-  const closeArea =
-    canClose ? (
-      <button
-        onClick={close}
-        aria-label="Close ad"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    ) : ad.skipAfter === -1 ? (
-      <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] text-white/55">Ad</span>
-    ) : (
-      <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] tabular-nums text-white/55">
-        Close in {closeCountdown}s
-      </span>
-    )
+  const closeArea = (
+    <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/55">
+      Ad
+    </span>
+  )
 
   return (
     <div className={`pointer-events-none absolute z-40 ${wrapperCls}`}>

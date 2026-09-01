@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
-import { Pause, Play, Volume2, VolumeX, X } from 'lucide-react'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { requestAd, trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
-
-const DISMISSED_KEY = 'vx_footer_ad_dismissed'
 
 /**
  * Footer ad banner — the black sponsored strip at the bottom of the app
@@ -17,8 +15,8 @@ const DISMISSED_KEY = 'vx_footer_ad_dismissed'
  * play/pause controls) and IMAGE creatives rendered at maximum quality
  * (quality=100, full-width cover — crisp on 4K/retina panels too).
  * Served live from the BANNER placement: kill switches, session caps and
- * frequency caps all apply. Renders nothing when no ad is eligible or the
- * user dismissed it for this browser session.
+ * frequency caps all apply. Renders nothing when no ad is eligible.
+ * Ads are non-closable.
  */
 export function FooterAd() {
   const [ad, setAd] = useState<ServedAd | null>(null)
@@ -29,7 +27,6 @@ export function FooterAd() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (window.sessionStorage.getItem(DISMISSED_KEY)) return
     let cancelled = false
     void (async () => {
       const served = await requestAd({ placement: 'BANNER' })
@@ -48,15 +45,6 @@ export function FooterAd() {
 
   const isVideo = ad.type === 'VIDEO' && !!ad.mediaUrl
   const isImage = (ad.type === 'IMAGE' || ad.type === 'BANNER') && !!ad.mediaUrl
-
-  function dismiss() {
-    try {
-      window.sessionStorage.setItem(DISMISSED_KEY, '1')
-    } catch {
-      /* ignore */
-    }
-    setAd(null)
-  }
 
   function handleCta() {
     void trackAdEvent(ad!, 'CLICK')
@@ -165,14 +153,6 @@ export function FooterAd() {
                 </button>
               </>
             )}
-            <button
-              type="button"
-              onClick={dismiss}
-              aria-label="Close ad"
-              className="grid size-9 place-items-center rounded-full bg-black/45 text-white/80 backdrop-blur transition hover:bg-black/65 hover:text-white"
-            >
-              <X className="size-4" />
-            </button>
           </div>
         </div>
 

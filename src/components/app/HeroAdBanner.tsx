@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
-import { Pause, Play, Volume2, VolumeX, X } from 'lucide-react'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { requestAd, trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
-
-const DISMISSED_KEY = 'vx_hero_ad_dismissed'
 
 /**
  * Hero ad banner — the premium black ad slot at the top of Home (above
@@ -16,7 +14,7 @@ const DISMISSED_KEY = 'vx_hero_ad_dismissed'
  * muted, looped, with sound toggle) and IMAGE creatives (crisp cover)
  * full-width, responsive on every device. Served live from the BANNER
  * placement: kill switches, session caps and frequency caps all apply.
- * Renders nothing when no ad is eligible or the user dismissed it.
+ * Renders nothing when no ad is eligible. Ads are non-closable.
  */
 export function HeroAdBanner() {
   const [ad, setAd] = useState<ServedAd | null>(null)
@@ -27,7 +25,6 @@ export function HeroAdBanner() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (window.sessionStorage.getItem(DISMISSED_KEY)) return
     let cancelled = false
     void (async () => {
       const served = await requestAd({ placement: 'BANNER' })
@@ -46,15 +43,6 @@ export function HeroAdBanner() {
 
   const isVideo = ad.type === 'VIDEO' && !!ad.mediaUrl
   const isImage = (ad.type === 'IMAGE' || ad.type === 'BANNER') && !!ad.mediaUrl
-
-  function dismiss() {
-    try {
-      window.sessionStorage.setItem(DISMISSED_KEY, '1')
-    } catch {
-      /* ignore */
-    }
-    setAd(null)
-  }
 
   function handleCta() {
     void trackAdEvent(ad!, 'CLICK')
@@ -163,14 +151,6 @@ export function HeroAdBanner() {
                 </button>
               </>
             )}
-            <button
-              type="button"
-              onClick={dismiss}
-              aria-label="Close ad"
-              className="grid size-8 place-items-center rounded-full bg-black/45 text-white/80 backdrop-blur transition hover:bg-black/65 hover:text-white"
-            >
-              <X className="size-4" />
-            </button>
           </div>
         </div>
 

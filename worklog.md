@@ -268,3 +268,24 @@ Work Log:
 
 Stage Summary:
 - Player-first performance: the app boots with 34% less JS and no admin/recharts weight; admin and player load on demand. Admin → Ad Creatives now has a real delete action (row + media file + audit, RBAC-gated). The admin dashboard is 100% real-time — every card, chart and split is computed from actual playback/ad/audit events, with viewer sessions now tracked end-to-end from the player into analytics.
+
+---
+Task ID: 11
+Agent: main (Z.ai Code)
+Task: Remove the ad close (X) option everywhere + slim down Home (remove Folders / Favorites / Recently Played sections).
+
+Work Log:
+- Ad close (X) buttons removed from ALL ad surfaces (user screenshot showed the round X button):
+  - HeroAdBanner.tsx: X button, dismiss(), DISMISSED_KEY (vx_hero_ad_dismissed) and the sessionStorage guard all removed — hero ad now always renders when eligible; only mute + play/pause controls remain.
+  - FooterAd.tsx: same cleanup (vx_footer_ad_dismissed removed) — footer ad is permanent for eligible sessions; mute/play-pause + CTA only.
+  - BannerAd.tsx (legacy, unused): X button + vx_banner_ad_dismissed removed for consistency.
+  - OverlayAd.tsx (in-player overlay): close X button and the "Close in Ns" countdown logic removed; closeArea is now a permanent "Ad" badge; overlay still auto-dismisses after ad.duration (non-closable by user). IMPRESSION/CLICK tracking unchanged.
+  - AdOverlay (pre/mid/post-roll) intentionally keeps the admin-configurable Skip button (skipAfter=-1 makes an ad non-skippable) — the user's screenshot was the X button, not the skip control.
+- HomeView.tsx slimmed to the core Home: removed the "Recently Played", "Favorites" and "Folders" sections entirely (JSX + recentlyPlayed/favorites/folderCards vars + buildFolderCards helper + Clock3/Heart/FolderOpen/formatSize/setActiveFolder imports). Home now shows: Hero ad → Continue Watching → Recently Added → Playlists (if any) → All Videos. Folders/Favorites/Recently Played remain fully available via sidebar/bottom-nav as their own views.
+- next.config.ts: added images.qualities [75, 85, 100] — fixes Next 16 console warnings and makes the hero (85) / footer (100) ad images actually render at their configured quality instead of silently falling back to 75.
+- Verification (agent-browser, fresh session): mobile 390x844 + desktop 1280x800 — button[aria-label="Close ad"] count = 0 app-wide; hero (top=89px) and footer ads render with only Unmute/Pause/CTA buttons; main sections exactly ["Continue Watching","Recently Added","All Videos"]; foldersSection/favoritesSection/recentlyPlayedSection all false; footer ad above mobile nav; sticky footer intact on desktop.
+- Player sanity check after OverlayAd edit: video card click → player opens, resume position 1:45 kept, controls + Auto quality menu intact, pre-roll flow unaffected.
+- bun run lint: 0 errors (12 pre-existing warnings); tsc clean for src; dev server restarted once for next.config (HTTP 200, images quality warnings gone from console).
+
+Stage Summary:
+- Ads are now non-closable across the whole app (hero, footer, overlay banners show no X anywhere) while keeping mute/play controls and CTAs; Home is a clean core feed (Continue Watching / Recently Added / Playlists / All Videos) with Folders, Favorites and Recently Played reachable only through their dedicated views; ad images now genuinely render at quality 85/100 per config.
