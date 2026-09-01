@@ -35,7 +35,7 @@ export const CREATIVE_VIDEO_EXTS = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp']
 export const CREATIVE_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
 export const MAX_VIDEO_BYTES = 3 * 1024 * MB // 3 GB
-export const MAX_CREATIVE_VIDEO_BYTES = 500 * MB
+export const MAX_CREATIVE_VIDEO_BYTES = 100 * MB // 100 MB maximum for ad videos
 export const MAX_CREATIVE_IMAGE_BYTES = 25 * MB
 export const CHUNK_SIZE = 3 * MB
 
@@ -380,7 +380,7 @@ export async function finalizeCreativeUpload(
       `Unsupported media type ".${ext || '?'}" — videos: ${CREATIVE_VIDEO_EXTS.join(', ')} · images: ${CREATIVE_IMAGE_EXTS.join(', ')}`,
     )
   }
-  if (isVideo && bytes > MAX_CREATIVE_VIDEO_BYTES) throw new UploadError(413, 'Ad video too large — 500 MB maximum')
+  if (isVideo && bytes > MAX_CREATIVE_VIDEO_BYTES) throw new UploadError(413, 'Ad video too large — 100 MB maximum')
   if (isImage && bytes > MAX_CREATIVE_IMAGE_BYTES) throw new UploadError(413, 'Image too large — 25 MB maximum')
 
   const probe = await probeMedia(tmpAbs, isVideo ? 'video' : 'image')
@@ -453,7 +453,7 @@ export async function createUploadSession(
   const cap = kind === 'video' ? MAX_VIDEO_BYTES : MAX_CREATIVE_VIDEO_BYTES
   if (!Number.isFinite(size) || size < 1) throw new UploadError(400, 'Invalid file size')
   if (size > cap) {
-    throw new UploadError(413, kind === 'video' ? 'Video too large — 3 GB maximum' : 'Media too large — 500 MB maximum')
+    throw new UploadError(413, kind === 'video' ? 'Video too large — 3 GB maximum' : 'Media too large — 100 MB maximum')
   }
   await purgeStaleSessions()
   const id = randomUUID()
