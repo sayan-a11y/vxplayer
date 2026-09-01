@@ -149,9 +149,9 @@ export async function saveLocalVideo(file: File): Promise<VideoDTO> {
     frameRate: 30,
     srcUrl,
     thumbnailUrl: meta.thumbnailUrl || '',
-    transcodeStatus: 'READY',
     addedAt: new Date().toISOString(),
-    isFavorite: false,
+    favorite: false,
+    history: null,
     qualities: [],
   }
 
