@@ -77,12 +77,14 @@ const DEFAULT_SETTINGS: SettingsDTO = {
 
 export default function AdsManagerView() {
   const session = useAdminSession()
-  const canEdit = can(session?.role, 'ads')
+  const canEdit = can(session?.role, 'settings')
 
   const [settings, setSettings] = useState<SettingsDTO>(DEFAULT_SETTINGS)
   const [dash, setDash] = useState<DashboardDTO | null>(null)
   const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmDisable, setConfirmDisable] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [freq, setFreq] = useState({
     adsPerSession: 6,

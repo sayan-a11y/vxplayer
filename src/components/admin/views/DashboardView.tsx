@@ -85,7 +85,8 @@ const DEFAULT_DASHBOARD: DashboardDTO = {
     adErrors: 0,
   },
   charts: {
-    dailyDelivery: [],
+    daily: [],
+    adDaily: [],
     placementSplit: [
       { placement: 'PRE_ROLL', impressions: 0 },
       { placement: 'MID_ROLL', impressions: 0 },
