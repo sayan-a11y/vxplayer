@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
+import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { trackAdEvent } from '@/lib/ads-client'
 import type { ServedAd } from '@/lib/types'
@@ -15,8 +16,7 @@ type OverlayAdProps = {
 /**
  * Non-blocking overlay ad (banner-style). Position follows ad.position.
  * The wrapper never intercepts pointer events — only the card itself does,
- * so center player controls stay fully usable. Non-closable by the user;
- * auto-dismisses after the ad duration.
+ * so center player controls stay fully usable. Auto-dismisses or closes on tap.
  * IMPRESSION is tracked by PlayerScreen when the overlay is shown; this
  * component tracks CLICK only.
  */
@@ -63,9 +63,19 @@ export default function OverlayAd({ ad, videoId, onClose }: OverlayAdProps) {
   ) : null
 
   const closeArea = (
-    <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/55">
-      Ad
-    </span>
+    <div className="flex items-center gap-1.5 shrink-0">
+      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/70">
+        Ad
+      </span>
+      <button
+        type="button"
+        onClick={close}
+        aria-label="Close advertisement overlay"
+        className="grid size-6 place-items-center rounded-full bg-white/15 text-white/80 transition hover:bg-white/25 hover:text-white"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
   )
 
   return (

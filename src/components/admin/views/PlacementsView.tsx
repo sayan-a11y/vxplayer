@@ -44,8 +44,14 @@ const PLACEMENT_META: {
   {
     id: 'BANNER',
     settingKey: 'bannerEnabled',
-    desc: 'Static banner slot on home / detail screens, outside of video playback.',
+    desc: 'Static banner / autoplaying hero slot on home / detail screens, outside of video playback.',
     flow: 'OPEN APP / BROWSE → BANNER SLOT → CONTENT',
+  },
+  {
+    id: 'FOOTER',
+    settingKey: 'footerEnabled',
+    desc: 'Dedicated sticky/in-page footer ad slot positioned at the bottom of the screens above navigation.',
+    flow: 'VIEW ANY SCREEN → FOOTER AD CREATIVE → RESPONSIVE WITH CLOSE (X)',
   },
 ]
 

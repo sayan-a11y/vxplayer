@@ -11,6 +11,7 @@ export const PLACEMENTS: readonly AdPlacement[] = [
   'POST_ROLL',
   'OVERLAY',
   'BANNER',
+  'FOOTER',
 ]
 
 export function isAdPlacement(v: string | null | undefined): v is AdPlacement {
@@ -49,6 +50,8 @@ export function allowedCreativeTypes(placement: AdPlacement): string[] {
       // Banner/hero slot serves admin VIDEO creatives as autoplaying
       // muted hero spots, plus images and text cards.
       return ['VIDEO', 'IMAGE', 'TEXT', 'BANNER']
+    case 'FOOTER':
+      return ['IMAGE', 'BANNER', 'TEXT', 'OVERLAY', 'VIDEO']
   }
 }
 
@@ -60,6 +63,7 @@ export function placementFlags(s: AppSettings): Record<AdPlacement, boolean> {
     POST_ROLL: s.postRollEnabled,
     OVERLAY: s.overlayEnabled,
     BANNER: s.bannerEnabled,
+    FOOTER: (s as any).footerEnabled ?? true,
   }
 }
 

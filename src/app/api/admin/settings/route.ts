@@ -23,6 +23,7 @@ function toSettingsDTO(s: AppSettings): SettingsDTO {
     postRollEnabled: s.postRollEnabled,
     overlayEnabled: s.overlayEnabled,
     bannerEnabled: s.bannerEnabled,
+    footerEnabled: (s as any).footerEnabled ?? true,
     adsPerSession: s.adsPerSession,
     maxMidRolls: s.maxMidRolls,
     overlayPerHour: s.overlayPerHour,
@@ -66,6 +67,7 @@ const KILL_SWITCH_KEYS = [
   'postRollEnabled',
   'overlayEnabled',
   'bannerEnabled',
+  'footerEnabled',
 ]
 
 /** GET /api/admin/settings — full platform settings. */

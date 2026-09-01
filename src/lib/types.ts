@@ -53,7 +53,7 @@ export type PlaylistDTO = {
   videos: VideoDTO[]
 }
 
-export type AdPlacement = 'PRE_ROLL' | 'MID_ROLL' | 'POST_ROLL' | 'OVERLAY' | 'BANNER'
+export type AdPlacement = 'PRE_ROLL' | 'MID_ROLL' | 'POST_ROLL' | 'OVERLAY' | 'BANNER' | 'FOOTER'
 
 export type ServedAd = {
   campaignId: string
@@ -100,6 +100,7 @@ export type SettingsDTO = {
   postRollEnabled: boolean
   overlayEnabled: boolean
   bannerEnabled: boolean
+  footerEnabled?: boolean
   adsPerSession: number
   maxMidRolls: number
   overlayPerHour: number

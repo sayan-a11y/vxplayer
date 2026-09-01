@@ -93,6 +93,7 @@ const DEFAULT_DASHBOARD: DashboardDTO = {
       { placement: 'POST_ROLL', impressions: 0 },
       { placement: 'OVERLAY', impressions: 0 },
       { placement: 'BANNER', impressions: 0 },
+      { placement: 'FOOTER', impressions: 0 },
     ],
   },
   recentAudit: [],

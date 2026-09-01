@@ -29,7 +29,10 @@ export function FooterAd() {
     if (typeof window === 'undefined') return
     let cancelled = false
     void (async () => {
-      const served = await requestAd({ placement: 'BANNER' })
+      let served = await requestAd({ placement: 'FOOTER' })
+      if (!served) {
+        served = await requestAd({ placement: 'BANNER' })
+      }
       if (cancelled || !served) return
       setAd(served)
       void trackAdEvent(served, 'IMPRESSION')

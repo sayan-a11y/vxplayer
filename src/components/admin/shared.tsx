@@ -267,9 +267,17 @@ export const PLACEMENT_LABELS: Record<AdPlacement, string> = {
   POST_ROLL: 'Post-Roll',
   OVERLAY: 'Overlay',
   BANNER: 'Banner',
+  FOOTER: 'Footer',
 }
 
-export const ALL_PLACEMENTS: AdPlacement[] = ['PRE_ROLL', 'MID_ROLL', 'POST_ROLL', 'OVERLAY', 'BANNER']
+export const ALL_PLACEMENTS: AdPlacement[] = [
+  'PRE_ROLL',
+  'MID_ROLL',
+  'POST_ROLL',
+  'OVERLAY',
+  'BANNER',
+  'FOOTER',
+]
 
 /** '2026-01-05' | ISO → '05 Jan' */
 export function fmtDay(iso: string): string {
