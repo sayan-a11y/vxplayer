@@ -12,6 +12,7 @@ import {
   Loader2,
   Palette,
   PlayCircle,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   type LucideIcon,
@@ -445,9 +446,9 @@ export function SettingsView() {
         </div>
         <div className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
           <div className="min-w-0">
-            <Label className="text-sm font-medium">Scan device storage</Label>
+            <Label className="text-sm font-medium">Refresh media library</Label>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Import videos from this device's storage into your library.
+              Rescan this physical device for newly added or removed videos.
             </p>
           </div>
           <Button
@@ -455,8 +456,8 @@ export function SettingsView() {
             onClick={handleScanStorage}
             className="min-h-10 gap-2 rounded-xl"
           >
-            <FolderSearch className="size-4" />
-            Scan
+            <RefreshCw className="size-4" />
+            Refresh
           </Button>
         </div>
       </SectionCard>
@@ -543,6 +544,9 @@ export function SettingsView() {
 
       {/* ── Privacy & Data ───────────────────────────────────── */}
       <SectionCard title="Privacy & Data" icon={ShieldCheck}>
+        <div className="rounded-xl border border-[var(--vx-accent)]/30 bg-[var(--vx-accent)]/5 p-3.5 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">100% Private Local Media:</span> Your device videos are processed and played locally on this physical device. Media files are never uploaded to any server or shared with any other user or admin.
+        </div>
         <Row
           label="Offline ad mode"
           hint="Simulate no internet — ads serve from local cache"

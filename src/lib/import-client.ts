@@ -11,10 +11,17 @@ import { useAppStore, type UploadTask } from '@/lib/store'
 
 /** Custom event AppShell listens on to open its hidden <input type="file">. */
 export const PICK_VIDEOS_EVENT = 'vx:pick-videos'
+/** Custom event AppShell listens on to open the media permission modal. */
+export const REQUEST_PERMISSION_EVENT = 'vx:request-permission'
 
 export function requestVideoPick() {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(PICK_VIDEOS_EVENT))
+}
+
+export function requestMediaPermission() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(REQUEST_PERMISSION_EVENT))
 }
 
 /** Import selected device videos locally with instant 0-second loading. */

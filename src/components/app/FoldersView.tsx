@@ -1,11 +1,11 @@
 'use client'
 
 import Image from 'next/image'
-import { FolderOpen, FolderSearch } from 'lucide-react'
+import { FolderOpen, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { formatSize } from '@/lib/format'
-import { requestVideoPick } from '@/lib/import-client'
+import { requestMediaPermission, requestVideoPick } from '@/lib/import-client'
 import { useAppStore } from '@/lib/store'
 import type { VideoDTO } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ export function FoldersView() {
   const activeFolder = useAppStore((s) => s.activeFolder)
   const setActiveFolder = useAppStore((s) => s.setActiveFolder)
   const hiddenFolders = useAppStore((s) => s.hiddenFolders)
+  const mediaPermission = useAppStore((s) => s.mediaPermission)
   const { videos, error, reload } = useVideos()
 
   // A folder was opened (from here or from Home) — show its videos.
@@ -69,28 +70,6 @@ export function FoldersView() {
 
   const folders = buildFolders(videos.filter((v) => !hiddenFolders.includes(v.folder)))
 
-  function handleAddFolder() {
-    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
-      import('@/lib/privateLibrary').then(({ scanDeviceDirectory }) => {
-        scanDeviceDirectory()
-          .then((count) => {
-            if (count > 0) {
-              useAppStore.getState().bumpData()
-              toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
-            }
-          })
-          .catch((err) => {
-            if (err?.name !== 'AbortError') {
-              requestVideoPick()
-            }
-          })
-      })
-    } else {
-      // Synchronous trigger on mobile
-      requestVideoPick()
-    }
-  }
-
   return (
     <div className="px-4 py-4 md:px-6">
       <div className="mb-4 flex min-h-11 items-center justify-between gap-3">
@@ -98,29 +77,35 @@ export function FoldersView() {
           <h1 className="text-lg font-semibold tracking-tight">Folders</h1>
           <span className="vx-chip tabular-nums">{folders.length}</span>
         </div>
-        <Button
-          onClick={() => void handleAddFolder()}
-          size="sm"
-          className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
-        >
-          <FolderSearch className="size-3.5" />
-          + Add Folder
-        </Button>
       </div>
 
       {folders.length === 0 ? (
         <EmptyState
           icon={FolderOpen}
           title="No folders found"
-          hint="Scan videos from this device's storage to build your library."
+          hint={
+            mediaPermission !== 'granted'
+              ? 'Allow media access to automatically discover folders from this device.'
+              : 'Your available device video folders will appear here automatically.'
+          }
           action={
-            <Button
-              onClick={() => void handleAddFolder()}
-              className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold"
-            >
-              <FolderSearch className="size-4" />
-              + Add Folder / Scan Device
-            </Button>
+            mediaPermission !== 'granted' ? (
+              <Button
+                onClick={() => requestMediaPermission()}
+                className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+              >
+                <FolderOpen className="size-4" />
+                Allow Media Access
+              </Button>
+            ) : (
+              <Button
+                onClick={() => requestVideoPick()}
+                className="vx-btn-accent mt-3 min-h-11 gap-2 rounded-xl px-5 font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+              >
+                <RefreshCw className="size-4" />
+                Refresh Media
+              </Button>
+            )
           }
         />
       ) : (

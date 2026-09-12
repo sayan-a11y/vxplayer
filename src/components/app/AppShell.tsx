@@ -19,6 +19,7 @@ import {
   Play,
   PlaySquare,
   Plus,
+  RefreshCw,
   Search,
   Settings2,
   type LucideIcon,
@@ -26,7 +27,7 @@ import {
 import { toast } from 'sonner'
 
 import { refreshAdCache } from '@/lib/ads-client'
-import { PICK_VIDEOS_EVENT, importVideoFiles, requestVideoPick } from '@/lib/import-client'
+import { PICK_VIDEOS_EVENT, REQUEST_PERMISSION_EVENT, importVideoFiles, requestVideoPick } from '@/lib/import-client'
 import { useAppStore, type AppView } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -240,12 +241,17 @@ export function AppShell() {
     }
   }, [mediaPermission])
 
-  // "Scan device storage" opens the device video picker (gallery on Android).
+  // Event listeners for file picking and permission requests
   useEffect(() => {
     void refreshAdCache()
     const open = () => fileInputRef.current?.click()
+    const openPerm = () => setPermissionDialogOpen(true)
     window.addEventListener(PICK_VIDEOS_EVENT, open)
-    return () => window.removeEventListener(PICK_VIDEOS_EVENT, open)
+    window.addEventListener(REQUEST_PERMISSION_EVENT, openPerm)
+    return () => {
+      window.removeEventListener(PICK_VIDEOS_EVENT, open)
+      window.removeEventListener(REQUEST_PERMISSION_EVENT, openPerm)
+    }
   }, [])
 
   // Auto-scan on startup if permission is already granted
@@ -415,8 +421,8 @@ export function AppShell() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 bg-[#090b1c] border-white/10 text-xs">
                   <DropdownMenuItem onSelect={() => requestVideoPick()} className="gap-2.5">
-                    <FolderSearch className="size-4" />
-                    Scan device storage
+                    <RefreshCw className="size-4" />
+                    Refresh media library
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-white/10" />
                   <DropdownMenuItem onSelect={() => setView('settings')} className="gap-2.5">
@@ -525,8 +531,8 @@ export function AppShell() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem onSelect={() => requestVideoPick()} className="gap-2.5">
-                  <FolderSearch className="size-4" />
-                  Scan device storage
+                  <RefreshCw className="size-4" />
+                  Refresh media library
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setView('settings')} className="gap-2.5">
@@ -635,7 +641,7 @@ export function AppShell() {
         accept="video/*,video/mp4,video/mkv,video/webm,video/x-matroska,video/quicktime,video/x-msvideo,video/3gpp,.mp4,.mkv,.webm,.mov,.avi,.3gp,.m4v,.ts,.flv"
         multiple
         className="sr-only"
-        aria-label="Import videos from device storage"
+        aria-label="Detect device videos"
         data-testid="video-import-input"
         onChange={(e) => {
           void handleFilesChosen(e.target.files)

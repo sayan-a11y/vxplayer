@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowLeft, FolderOpen, FolderSearch, Plus, RefreshCw, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, FolderOpen, RefreshCw, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { apiGet } from '@/lib/api'
-import { requestVideoPick } from '@/lib/import-client'
+import { requestMediaPermission, requestVideoPick } from '@/lib/import-client'
+import { getLocalVideos } from '@/lib/privateLibrary'
 import { useAppStore } from '@/lib/store'
 import type { VideoDTO } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -28,9 +28,7 @@ export function sortVideos(list: VideoDTO[], sort: LibrarySort): VideoDTO[] {
   return arr.sort((a, b) => b.sizeMB - a.sizeMB)
 }
 
-import { getLocalVideos } from '@/lib/privateLibrary'
-
-/** Device-local videos fetch — refetches when the global dataVersion bumps. */
+/** Device-local videos fetch — strictly private to this physical device. */
 export function useVideos() {
   const dataVersion = useAppStore((s) => s.dataVersion)
   const [videos, setVideos] = useState<VideoDTO[] | null>(null)
@@ -39,20 +37,8 @@ export function useVideos() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const [local, serverRes] = await Promise.all([
-        getLocalVideos().catch(() => []),
-        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
-      ])
-      const server = serverRes?.videos ?? []
-      const seen = new Set(local.map((v) => v.fileName.toLowerCase()))
-      const merged: VideoDTO[] = [...local]
-      for (const s of server) {
-        if (!seen.has(s.fileName.toLowerCase()) && !seen.has(s.id.toLowerCase())) {
-          seen.add(s.fileName.toLowerCase())
-          merged.push(s)
-        }
-      }
-      setVideos(merged)
+      const local = await getLocalVideos().catch(() => [])
+      setVideos(local)
     } catch {
       setVideos([])
     }
@@ -125,6 +111,7 @@ export function VideosView() {
   const setActiveFolder = useAppStore((s) => s.setActiveFolder)
   const hiddenFolders = useAppStore((s) => s.hiddenFolders)
   const librarySort = useAppStore((s) => s.librarySort)
+  const mediaPermission = useAppStore((s) => s.mediaPermission)
   const { videos, error, reload } = useVideos()
 
   const visible = useMemo(() => {
@@ -154,28 +141,6 @@ export function VideosView() {
     )
   }
 
-  function handleAddFolder() {
-    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
-      import('@/lib/privateLibrary').then(({ scanDeviceDirectory }) => {
-        scanDeviceDirectory()
-          .then((count) => {
-            if (count > 0) {
-              useAppStore.getState().bumpData()
-              toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
-            }
-          })
-          .catch((err) => {
-            if (err?.name !== 'AbortError') {
-              requestVideoPick()
-            }
-          })
-      })
-    } else {
-      // Synchronous trigger for mobile
-      requestVideoPick()
-    }
-  }
-
   return (
     <div className="px-4 py-4 md:px-6">
       {activeFolder ? (
@@ -202,55 +167,40 @@ export function VideosView() {
             <h1 className="text-lg font-semibold tracking-tight">All Videos</h1>
             <span className="vx-chip tabular-nums">{visible.length}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => requestVideoPick()}
-              size="sm"
-              className="vx-btn-accent h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
-            >
-              <Plus className="size-3.5" />
-              + Add Video
-            </Button>
-            <Button
-              onClick={() => void handleAddFolder()}
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5 rounded-xl px-3 text-xs font-semibold"
-            >
-              <FolderSearch className="size-3.5" />
-              + Folder
-            </Button>
-          </div>
         </div>
       )}
 
       {visible.length === 0 ? (
         <EmptyState
           icon={FolderOpen}
-          title="No videos here"
+          title="No videos found"
           hint={
             activeFolder
-              ? 'This folder has no playable videos yet.'
-              : 'Add videos or folders from this device’s storage to start watching.'
+              ? 'This folder has no playable videos.'
+              : mediaPermission !== 'granted'
+                ? 'Allow media access to watch videos from this device.'
+                : 'Your available device videos will appear here automatically.'
           }
           action={
             !activeFolder && (
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
-                <Button
-                  onClick={() => requestVideoPick()}
-                  className="vx-btn-accent min-h-11 gap-2 rounded-xl px-5 font-semibold"
-                >
-                  <Plus className="size-4" />
-                  + Add Single / Multi Videos
-                </Button>
-                <Button
-                  onClick={() => void handleAddFolder()}
-                  variant="outline"
-                  className="min-h-11 gap-2 rounded-xl px-5 font-semibold"
-                >
-                  <FolderSearch className="size-4" />
-                  + Add Entire Folder
-                </Button>
+              <div className="mt-3 flex items-center justify-center">
+                {mediaPermission !== 'granted' ? (
+                  <Button
+                    onClick={() => requestMediaPermission()}
+                    className="vx-btn-accent min-h-11 gap-2 rounded-xl px-5 font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+                  >
+                    <FolderOpen className="size-4" />
+                    Allow Media Access
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => requestVideoPick()}
+                    className="vx-btn-accent min-h-11 gap-2 rounded-xl px-5 font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+                  >
+                    <RefreshCw className="size-4" />
+                    Refresh Media
+                  </Button>
+                )}
               </div>
             )
           }

@@ -30,9 +30,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { apiGet } from '@/lib/api'
 import { formatDuration, formatSize } from '@/lib/format'
-import { requestVideoPick } from '@/lib/import-client'
+import { requestMediaPermission, requestVideoPick } from '@/lib/import-client'
 import { getLocalVideos, getLocalPlaylists, scanDeviceDirectory } from '@/lib/privateLibrary'
 import { useAppStore } from '@/lib/store'
 import type { PlaylistDTO, VideoDTO } from '@/lib/types'
@@ -76,6 +75,7 @@ export function HomeView() {
   const setActiveFolder = useAppStore((s) => s.setActiveFolder)
   const hiddenFolders = useAppStore((s) => s.hiddenFolders)
   const openPlayer = useAppStore((s) => s.openPlayer)
+  const mediaPermission = useAppStore((s) => s.mediaPermission)
 
   const [videos, setVideos] = useState<VideoDTO[] | null>(null)
   const [playlists, setPlaylists] = useState<PlaylistDTO[] | null>(null)
@@ -87,21 +87,11 @@ export function HomeView() {
 
   const load = useCallback(async () => {
     try {
-      const [localVids, localPls, serverRes] = await Promise.all([
+      const [localVids, localPls] = await Promise.all([
         getLocalVideos().catch(() => []),
         getLocalPlaylists().catch(() => []),
-        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
       ])
-      const serverVids = serverRes?.videos ?? []
-      const seen = new Set((localVids ?? []).map((v) => v.fileName.toLowerCase()))
-      const merged: VideoDTO[] = [...(localVids ?? [])]
-      for (const sv of serverVids) {
-        if (!seen.has(sv.fileName.toLowerCase()) && !seen.has(sv.id.toLowerCase())) {
-          seen.add(sv.fileName.toLowerCase())
-          merged.push(sv)
-        }
-      }
-      setVideos(merged)
+      setVideos(localVids ?? [])
       setPlaylists(localPls ?? [])
     } catch {
       setVideos([])
@@ -317,16 +307,6 @@ export function HomeView() {
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={handleScanDevice}
-              aria-label="Add videos from device storage"
-              title="Add videos from device storage"
-              className="grid size-8 place-items-center rounded-lg text-cyan-400 hover:bg-white/5 hover:text-white transition"
-            >
-              <Plus className="size-4" />
-            </button>
-
-            <button
-              type="button"
               onClick={() => setMobileViewMode(mobileViewMode === 'list' ? 'grid' : 'list')}
               aria-label="Toggle view mode"
               className="grid size-8 place-items-center rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition"
@@ -370,25 +350,27 @@ export function HomeView() {
             </div>
             <p className="font-semibold text-sm text-white">No videos found</p>
             <p className="max-w-xs text-xs text-white/50">
-              Scan your device for videos to automatically populate your folders.
+              {mediaPermission !== 'granted'
+                ? 'Allow media access to watch videos from this device.'
+                : 'Your available device videos will appear here automatically.'}
             </p>
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            {mediaPermission !== 'granted' ? (
+              <Button
+                onClick={() => requestMediaPermission()}
+                className="vx-btn-accent mt-2 h-10 gap-2 rounded-xl px-5 text-xs font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+              >
+                <FolderOpen className="size-4" />
+                Allow Media Access
+              </Button>
+            ) : (
               <Button
                 onClick={handleScanDevice}
-                className="vx-btn-accent h-10 gap-2 rounded-xl px-4 text-xs font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+                className="vx-btn-accent mt-2 h-10 gap-2 rounded-xl px-5 text-xs font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
               >
-                <FolderSearch className="size-4" />
-                Scan Device Storage
+                <RefreshCw className="size-4" />
+                Refresh Media
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => requestVideoPick()}
-                className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-xs font-medium text-white hover:bg-white/10"
-              >
-                <Plus className="size-4 text-[var(--vx-accent-soft)]" />
-                Choose Videos
-              </Button>
-            </div>
+            )}
           </div>
         ) : mobileViewMode === 'list' ? (
           <div className="space-y-2">
@@ -579,15 +561,46 @@ export function HomeView() {
 
         {/* 6. All Videos with Between-Cards Ad */}
         <Section title="All Videos" icon={Film} onSeeAll={() => setView('videos')}>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {videos.slice(0, 4).map((v) => (
-              <VideoCard key={v.id} video={v} queue={videos} />
-            ))}
-            {videos.length >= 2 && <BetweenCardsAd />}
-            {videos.slice(4, 12).map((v) => (
-              <VideoCard key={v.id} video={v} queue={videos} />
-            ))}
-          </div>
+          {videos.length === 0 ? (
+            <div className="vx-card flex flex-col items-center justify-center gap-2 py-12 text-center my-3 p-4">
+              <div className="grid size-12 place-items-center rounded-2xl border border-white/10 bg-white/5 text-muted-foreground">
+                <FolderOpen className="size-6 text-white/50" />
+              </div>
+              <p className="font-semibold text-sm text-white">No videos found</p>
+              <p className="max-w-xs text-xs text-white/50">
+                {mediaPermission !== 'granted'
+                  ? 'Allow media access to watch videos from this device.'
+                  : 'Your available device videos will appear here automatically.'}
+              </p>
+              {mediaPermission !== 'granted' ? (
+                <Button
+                  onClick={() => requestMediaPermission()}
+                  className="vx-btn-accent mt-2 h-10 gap-2 rounded-xl px-5 text-xs font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+                >
+                  <FolderOpen className="size-4" />
+                  Allow Media Access
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleScanDevice}
+                  className="vx-btn-accent mt-2 h-10 gap-2 rounded-xl px-5 text-xs font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+                >
+                  <RefreshCw className="size-4" />
+                  Refresh Media
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+              {videos.slice(0, 4).map((v) => (
+                <VideoCard key={v.id} video={v} queue={videos} />
+              ))}
+              {videos.length >= 2 && <BetweenCardsAd />}
+              {videos.slice(4, 12).map((v) => (
+                <VideoCard key={v.id} video={v} queue={videos} />
+              ))}
+            </div>
+          )}
         </Section>
 
         {/* 7. Dedicated Banner Ad slot */}
