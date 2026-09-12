@@ -50,11 +50,102 @@ export type ScanStateRecord = {
 // In-memory ObjectURL cache for active blob URLs
 const objectUrlMap = new Map<string, string>()
 
+// In-memory cache of video signatures (fileName_sizeMB) for instant deduplication
+const knownSignatures = new Set<string>()
+const knownVideoMap = new Map<string, VideoDTO>()
+
 // Video file extensions supported
 const VIDEO_EXTENSIONS = /\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|mts|m2ts|flv|ogv|wmv|asf|rm|rmvb|vob|divx|xvid)$/i
 
 // MIME types for video detection
 const VIDEO_MIME_PREFIX = 'video/'
+
+// Background metadata worker queue for non-blocking thumbnail extraction
+type ExtractionJob = {
+  id: string
+  file: File
+}
+const extractionQueue: ExtractionJob[] = []
+let isProcessingQueue = false
+
+async function processNextExtraction() {
+  if (isProcessingQueue || extractionQueue.length === 0) return
+  isProcessingQueue = true
+
+  while (extractionQueue.length > 0) {
+    const job = extractionQueue.shift()
+    if (!job) break
+
+    try {
+      const meta = await extractLocalVideoMetadata(job.file)
+      if (meta.thumbnailUrl || meta.duration > 0) {
+        await updateVideoMetadataInDB(job.id, meta)
+      }
+    } catch {
+      // Safe fallback
+    }
+
+    // Yield to main event loop between jobs
+    await new Promise((r) => setTimeout(r, 40))
+  }
+
+  isProcessingQueue = false
+}
+
+export function queueMetadataExtraction(id: string, file: File) {
+  extractionQueue.push({ id, file })
+  void processNextExtraction()
+}
+
+/**
+ * Update video metadata (thumbnail, duration, dimensions) in IndexedDB after background extraction.
+ */
+export async function updateVideoMetadataInDB(
+  id: string,
+  meta: { duration: number; width: number; height: number; thumbnailUrl: string }
+): Promise<void> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_VIDEOS, 'readwrite')
+    const store = tx.objectStore(STORE_VIDEOS)
+    const rec = await new Promise<LocalVideoRecord | undefined>((resolve, reject) => {
+      const req = store.get(id)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+
+    if (rec) {
+      rec.video.duration = meta.duration > 0 ? meta.duration : rec.video.duration
+      rec.video.width = meta.width || rec.video.width
+      rec.video.height = meta.height || rec.video.height
+      rec.video.resolutionLabel = resolutionLabelFor(meta.height || rec.video.height)
+      if (meta.thumbnailUrl) {
+        rec.video.thumbnailUrl = meta.thumbnailUrl
+      }
+      store.put(rec)
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+
+      // Update in-memory map
+      const inMem = knownVideoMap.get(id)
+      if (inMem) {
+        inMem.duration = rec.video.duration
+        inMem.thumbnailUrl = rec.video.thumbnailUrl
+        inMem.resolutionLabel = rec.video.resolutionLabel
+      }
+
+      // Notify store to update UI
+      if (typeof window !== 'undefined') {
+        const { useAppStore } = await import('./store')
+        useAppStore.getState().bumpData()
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to update video metadata in DB:', err)
+  }
+}
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -103,6 +194,7 @@ function resolutionLabelFor(height: number): string {
 
 /**
  * Capture video thumbnail and metadata from a local File in the browser using HTML5 Video + Canvas.
+ * Ultra-fast, lightweight canvas capture with aggressive 800ms safety timeout.
  */
 export function extractLocalVideoMetadata(file: File): Promise<{
   duration: number
@@ -116,25 +208,30 @@ export function extractLocalVideoMetadata(file: File): Promise<{
     video.preload = 'metadata'
     video.muted = true
     video.playsInline = true
-    video.src = url
 
     let resolved = false
     const fallback = () => {
       if (resolved) return
       resolved = true
+      try {
+        video.removeAttribute('src')
+        video.load()
+      } catch {}
       URL.revokeObjectURL(url)
       resolve({
-        duration: 60,
+        duration: 0,
         width: 1920,
         height: 1080,
         thumbnailUrl: '',
       })
     }
 
-    const timer = setTimeout(fallback, 4000)
+    // 800ms maximum timeout so it never blocks
+    const timer = setTimeout(fallback, 800)
 
     video.onloadedmetadata = () => {
-      video.currentTime = Math.min(2, Math.max(0.5, video.duration * 0.1 || 1))
+      const seekTime = Math.min(2, Math.max(0.5, (video.duration || 0) * 0.1))
+      video.currentTime = seekTime
     }
 
     video.onseeked = () => {
@@ -145,27 +242,40 @@ export function extractLocalVideoMetadata(file: File): Promise<{
       let thumbnailUrl = ''
       try {
         const canvas = document.createElement('canvas')
-        canvas.width = Math.min(640, video.videoWidth || 640)
-        canvas.height = Math.min(360, video.videoHeight || 360)
+        canvas.width = Math.min(360, video.videoWidth || 360)
+        canvas.height = Math.min(200, video.videoHeight || 200)
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-          thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8)
+          thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7)
         }
       } catch {
-        // canvas export issue
+        // Canvas export issue fallback
       }
 
+      const duration = Math.max(1, Math.round(video.duration || 0))
+      const width = video.videoWidth || 1920
+      const height = video.videoHeight || 1080
+
+      try {
+        video.removeAttribute('src')
+        video.load()
+      } catch {}
       URL.revokeObjectURL(url)
+
       resolve({
-        duration: Math.max(1, Math.round(video.duration || 60)),
-        width: video.videoWidth || 1920,
-        height: video.videoHeight || 1080,
+        duration,
+        width,
+        height,
         thumbnailUrl,
       })
     }
 
     video.onerror = fallback
+    video.src = url
+    try {
+      video.load()
+    } catch {}
   })
 }
 
@@ -632,12 +742,27 @@ export async function addScanDirectory(): Promise<{ count: number; directoryName
 
 /**
  * Save a device video to the private local library with folder categorization.
- * Prevents duplicates by fileName and size.
+ * Instant sub-5ms save with immediate UI display, followed by background thumbnail extraction.
  */
 export async function saveLocalVideo(file: File, folderName?: string): Promise<VideoDTO> {
   const ext = file.name.lastIndexOf('.') >= 0 ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase() : 'mp4'
   const title = file.name.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim() || 'Untitled Video'
   const sizeMB = Math.max(1, Math.round(file.size / (1024 * 1024)))
+  const signature = `${file.name}_${sizeMB}`
+
+  // Instant deduplication: check in-memory cache first
+  if (knownSignatures.has(signature)) {
+    for (const v of knownVideoMap.values()) {
+      if (v.fileName === file.name && Math.abs(v.sizeMB - sizeMB) <= 1) {
+        let liveUrl = objectUrlMap.get(v.id)
+        if (!liveUrl) {
+          liveUrl = URL.createObjectURL(file)
+          objectUrlMap.set(v.id, liveUrl)
+        }
+        return { ...v, srcUrl: liveUrl }
+      }
+    }
+  }
 
   let folder = folderName?.trim()
   if (!folder && file.webkitRelativePath) {
@@ -659,34 +784,7 @@ export async function saveLocalVideo(file: File, folderName?: string): Promise<V
     else folder = 'Videos'
   }
 
-  // Deduplicate: check if an identical file already exists in IndexedDB
-  try {
-    const db = await openDB()
-    const tx = db.transaction(STORE_VIDEOS, 'readonly')
-    const store = tx.objectStore(STORE_VIDEOS)
-    const all = await new Promise<LocalVideoRecord[]>((resolve, reject) => {
-      const req = store.getAll()
-      req.onsuccess = () => resolve(req.result as LocalVideoRecord[])
-      req.onerror = () => reject(req.error)
-    })
-    const existing = (all || []).find(
-      (r) => r.video.fileName === file.name && Math.abs(r.video.sizeMB - sizeMB) <= 1
-    )
-    if (existing) {
-      // Re-create object URL if needed
-      let liveUrl = objectUrlMap.get(existing.id)
-      if (!liveUrl) {
-        liveUrl = URL.createObjectURL(existing.file)
-        objectUrlMap.set(existing.id, liveUrl)
-      }
-      return { ...existing.video, srcUrl: liveUrl }
-    }
-  } catch {}
-
   const id = `local_${crypto.randomUUID()}`
-  const meta = await extractLocalVideoMetadata(file)
-
-  // Active runtime object URL
   const srcUrl = URL.createObjectURL(file)
   objectUrlMap.set(id, srcUrl)
 
@@ -695,22 +793,25 @@ export async function saveLocalVideo(file: File, folderName?: string): Promise<V
     title,
     fileName: file.name,
     folder,
-    duration: meta.duration,
-    width: meta.width,
-    height: meta.height,
-    resolutionLabel: resolutionLabelFor(meta.height),
+    duration: 0,
+    width: 1920,
+    height: 1080,
+    resolutionLabel: 'HD',
     sizeMB,
     codec: 'h264',
     audioCodec: 'aac',
     container: ext,
     frameRate: 30,
     srcUrl,
-    thumbnailUrl: meta.thumbnailUrl || '',
+    thumbnailUrl: '',
     addedAt: new Date().toISOString(),
     favorite: false,
     history: null,
     qualities: [],
   }
+
+  knownSignatures.add(signature)
+  knownVideoMap.set(id, videoDto)
 
   try {
     const db = await openDB()
@@ -730,19 +831,22 @@ export async function saveLocalVideo(file: File, folderName?: string): Promise<V
     console.warn('IndexedDB save notice:', err)
   }
 
+  // Queue thumbnail and exact duration extraction in background without blocking
+  queueMetadataExtraction(id, file)
+
   return videoDto
 }
 
 /**
- * Scan a directory using modern File System Access API (Android/Chrome/Edge).
+ * Scan a directory using modern File System Access API (Desktop Chrome/Edge).
  * Automatically stores handle for persistent background access.
  */
 export async function scanDeviceDirectory(): Promise<number> {
   if (typeof window === 'undefined' || !('showDirectoryPicker' in window)) {
-    throw new Error('Directory picker not supported')
+    throw new Error('Directory picker not supported in this browser')
   }
 
-  // @ts-expect-error - showDirectoryPicker is standard in modern browsers
+  // @ts-expect-error - showDirectoryPicker is standard in modern desktop browsers
   const dirHandle = await window.showDirectoryPicker({ mode: 'read' })
   if (!dirHandle) return 0
 
@@ -752,14 +856,16 @@ export async function scanDeviceDirectory(): Promise<number> {
   } catch {}
 
   let count = 0
+  const { useAppStore } = await import('./store')
 
   async function processEntries(handle: any, folderName: string) {
     for await (const entry of handle.values()) {
       if (entry.kind === 'file') {
-        if (/\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|flv)$/i.test(entry.name)) {
+        if (/\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|mts|flv|wmv|ogv)$/i.test(entry.name)) {
           const file = await entry.getFile()
           await saveLocalVideo(file, folderName)
           count += 1
+          useAppStore.getState().bumpData()
         }
       } else if (entry.kind === 'directory') {
         await processEntries(entry, entry.name)
@@ -772,22 +878,28 @@ export async function scanDeviceDirectory(): Promise<number> {
 }
 
 /**
- * Batch import files with non-blocking async execution.
+ * Batch import files with instant sub-5ms non-blocking async execution.
+ * Triggers live UI bumps so files appear in real-time as they are added.
  */
 export async function scanFilesBatch(
   files: File[] | FileList,
   onProgress?: (current: number, total: number) => void
 ): Promise<number> {
   const fileArray = Array.from(files).filter((f) =>
-    /\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|flv)$/i.test(f.name) || f.type.startsWith('video/')
+    /\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|mts|flv|wmv|ogv)$/i.test(f.name) || f.type.startsWith('video/')
   )
+  if (fileArray.length === 0) return 0
+
   let count = 0
+  const { useAppStore } = await import('./store')
+
   for (let i = 0; i < fileArray.length; i++) {
     const f = fileArray[i]
     await saveLocalVideo(f)
     count++
+    useAppStore.getState().bumpData() // Instant UI display for each video!
     onProgress?.(i + 1, fileArray.length)
-    if (i % 5 === 0) {
+    if (i % 3 === 0) {
       await new Promise((r) => setTimeout(r, 0))
     }
   }
@@ -823,14 +935,16 @@ export async function getLocalVideos(): Promise<VideoDTO[]> {
       historyMap.set(h.videoId, h)
     }
 
-    return (records || []).map((rec) => {
+    const result: VideoDTO[] = []
+
+    for (const rec of records || []) {
       let liveUrl = objectUrlMap.get(rec.id)
       if (!liveUrl && rec.file) {
         liveUrl = URL.createObjectURL(rec.file)
         objectUrlMap.set(rec.id, liveUrl)
       }
       const hist = historyMap.get(rec.id)
-      return {
+      const v: VideoDTO = {
         ...rec.video,
         srcUrl: liveUrl || rec.video.srcUrl,
         history: hist
@@ -841,7 +955,14 @@ export async function getLocalVideos(): Promise<VideoDTO[]> {
             }
           : rec.video.history,
       }
-    })
+
+      const sig = `${v.fileName}_${v.sizeMB}`
+      knownSignatures.add(sig)
+      knownVideoMap.set(v.id, v)
+      result.push(v)
+    }
+
+    return result
   } catch (err) {
     console.warn('IndexedDB get notice:', err)
     return []

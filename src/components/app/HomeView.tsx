@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { apiGet } from '@/lib/api'
 import { formatDuration, formatSize } from '@/lib/format'
 import { requestVideoPick } from '@/lib/import-client'
 import { getLocalVideos, getLocalPlaylists, scanDeviceDirectory } from '@/lib/privateLibrary'
@@ -86,11 +87,21 @@ export function HomeView() {
 
   const load = useCallback(async () => {
     try {
-      const [localVids, localPls] = await Promise.all([
+      const [localVids, localPls, serverRes] = await Promise.all([
         getLocalVideos().catch(() => []),
         getLocalPlaylists().catch(() => []),
+        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
       ])
-      setVideos(localVids ?? [])
+      const serverVids = serverRes?.videos ?? []
+      const seen = new Set((localVids ?? []).map((v) => v.fileName.toLowerCase()))
+      const merged: VideoDTO[] = [...(localVids ?? [])]
+      for (const sv of serverVids) {
+        if (!seen.has(sv.fileName.toLowerCase()) && !seen.has(sv.id.toLowerCase())) {
+          seen.add(sv.fileName.toLowerCase())
+          merged.push(sv)
+        }
+      }
+      setVideos(merged)
       setPlaylists(localPls ?? [])
     } catch {
       setVideos([])
@@ -138,14 +149,22 @@ export function HomeView() {
     return folders.filter((f) => f.name === selectedFolderFilter)
   }, [folders, selectedFolderFilter])
 
-  async function handleScanDevice() {
-    try {
-      const count = await scanDeviceDirectory()
-      if (count > 0) {
-        useAppStore.getState().bumpData()
-        toast.success(`Detected ${count} video${count === 1 ? '' : 's'} across your device folders`)
-      }
-    } catch {
+  function handleScanDevice() {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      scanDeviceDirectory()
+        .then((count) => {
+          if (count > 0) {
+            useAppStore.getState().bumpData()
+            toast.success(`Detected ${count} video${count === 1 ? '' : 's'} across your device folders`)
+          }
+        })
+        .catch((err) => {
+          if (err?.name !== 'AbortError') {
+            requestVideoPick()
+          }
+        })
+    } else {
+      // Synchronous call on mobile to prevent browser gesture expiration
       requestVideoPick()
     }
   }
@@ -298,6 +317,16 @@ export function HomeView() {
           <div className="flex items-center gap-1">
             <button
               type="button"
+              onClick={handleScanDevice}
+              aria-label="Add videos from device storage"
+              title="Add videos from device storage"
+              className="grid size-8 place-items-center rounded-lg text-cyan-400 hover:bg-white/5 hover:text-white transition"
+            >
+              <Plus className="size-4" />
+            </button>
+
+            <button
+              type="button"
               onClick={() => setMobileViewMode(mobileViewMode === 'list' ? 'grid' : 'list')}
               aria-label="Toggle view mode"
               className="grid size-8 place-items-center rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition"
@@ -343,13 +372,23 @@ export function HomeView() {
             <p className="max-w-xs text-xs text-white/50">
               Scan your device for videos to automatically populate your folders.
             </p>
-            <Button
-              onClick={() => void handleScanDevice()}
-              className="vx-btn-accent mt-2 h-10 gap-2 rounded-xl px-5 text-xs font-semibold"
-            >
-              <FolderSearch className="size-4" />
-              Scan Device Storage
-            </Button>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              <Button
+                onClick={handleScanDevice}
+                className="vx-btn-accent h-10 gap-2 rounded-xl px-4 text-xs font-semibold shadow-[0_0_15px_rgba(0,132,255,0.4)]"
+              >
+                <FolderSearch className="size-4" />
+                Scan Device Storage
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => requestVideoPick()}
+                className="h-10 gap-2 rounded-xl border-white/10 bg-white/5 px-4 text-xs font-medium text-white hover:bg-white/10"
+              >
+                <Plus className="size-4 text-[var(--vx-accent-soft)]" />
+                Choose Videos
+              </Button>
+            </div>
           </div>
         ) : mobileViewMode === 'list' ? (
           <div className="space-y-2">

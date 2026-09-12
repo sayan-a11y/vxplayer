@@ -69,15 +69,24 @@ export function FoldersView() {
 
   const folders = buildFolders(videos.filter((v) => !hiddenFolders.includes(v.folder)))
 
-  async function handleAddFolder() {
-    try {
-      const { scanDeviceDirectory } = await import('@/lib/privateLibrary')
-      const count = await scanDeviceDirectory()
-      if (count > 0) {
-        useAppStore.getState().bumpData()
-        toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
-      }
-    } catch {
+  function handleAddFolder() {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      import('@/lib/privateLibrary').then(({ scanDeviceDirectory }) => {
+        scanDeviceDirectory()
+          .then((count) => {
+            if (count > 0) {
+              useAppStore.getState().bumpData()
+              toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
+            }
+          })
+          .catch((err) => {
+            if (err?.name !== 'AbortError') {
+              requestVideoPick()
+            }
+          })
+      })
+    } else {
+      // Synchronous trigger on mobile
       requestVideoPick()
     }
   }

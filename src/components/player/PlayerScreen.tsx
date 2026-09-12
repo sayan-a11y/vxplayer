@@ -578,7 +578,7 @@ export default function PlayerScreen() {
 
   // ── Quality: fetch + poll variants while they are generated ─
   useEffect(() => {
-    if (!videoId) return
+    if (!videoId || videoId.startsWith('local_')) return
     const initial = useAppStore.getState().playerVideo?.qualities
     const busy = initial?.some((v) => v.status === 'PROCESSING') ?? false
     if (initial && initial.length > 0 && !busy) return

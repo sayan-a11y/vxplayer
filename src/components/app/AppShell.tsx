@@ -280,6 +280,25 @@ export function AppShell() {
     return () => window.removeEventListener('focus', onFocus)
   }, [mediaPermission])
 
+  // Drag & drop video files anywhere onto the window
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault()
+    }
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault()
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        void handleFilesChosen(e.dataTransfer.files)
+      }
+    }
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [])
+
   async function handleFilesChosen(files: FileList | null) {
     if (!files || files.length === 0) return
     try {
@@ -294,17 +313,24 @@ export function AppShell() {
     }
   }
 
-  const handleGrantPermission = async () => {
+  const handleGrantPermission = () => {
     setPermissionDialogOpen(false)
     setMediaPermission('granted')
-    try {
-      const { scanDeviceDirectory } = await import('@/lib/privateLibrary')
-      const count = await scanDeviceDirectory()
-      if (count > 0) {
-        useAppStore.getState().bumpData()
-        toast.success(`Detected ${count} videos across your device folders`)
-      }
-    } catch {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      import('@/lib/privateLibrary').then(({ scanDeviceDirectory }) => {
+        scanDeviceDirectory().then((count) => {
+          if (count > 0) {
+            useAppStore.getState().bumpData()
+            toast.success(`Detected ${count} videos across your device folders`)
+          }
+        }).catch((err) => {
+          if (err?.name !== 'AbortError') {
+            fileInputRef.current?.click()
+          }
+        })
+      })
+    } else {
+      // Synchronous click on mobile within active user gesture
       fileInputRef.current?.click()
     }
   }
@@ -606,7 +632,7 @@ export function AppShell() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="video/*"
+        accept="video/*,video/mp4,video/mkv,video/webm,video/x-matroska,video/quicktime,video/x-msvideo,video/3gpp,.mp4,.mkv,.webm,.mov,.avi,.3gp,.m4v,.ts,.flv"
         multiple
         className="sr-only"
         aria-label="Import videos from device storage"

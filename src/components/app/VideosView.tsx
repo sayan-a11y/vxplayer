@@ -39,8 +39,20 @@ export function useVideos() {
   const load = useCallback(async () => {
     setError(false)
     try {
-      const local = await getLocalVideos().catch(() => [])
-      setVideos(local)
+      const [local, serverRes] = await Promise.all([
+        getLocalVideos().catch(() => []),
+        apiGet<{ videos: VideoDTO[] }>('/api/videos').catch(() => ({ videos: [] })),
+      ])
+      const server = serverRes?.videos ?? []
+      const seen = new Set(local.map((v) => v.fileName.toLowerCase()))
+      const merged: VideoDTO[] = [...local]
+      for (const s of server) {
+        if (!seen.has(s.fileName.toLowerCase()) && !seen.has(s.id.toLowerCase())) {
+          seen.add(s.fileName.toLowerCase())
+          merged.push(s)
+        }
+      }
+      setVideos(merged)
     } catch {
       setVideos([])
     }
@@ -118,7 +130,9 @@ export function VideosView() {
   const visible = useMemo(() => {
     if (!videos) return []
     const filtered = videos.filter(
-      (v) => !hiddenFolders.includes(v.folder) && (!activeFolder || v.folder === activeFolder)
+      (v) =>
+        !hiddenFolders.includes(v.folder) &&
+        (!activeFolder || v.folder.toLowerCase() === activeFolder.toLowerCase())
     )
     return sortVideos(filtered, librarySort)
   }, [videos, hiddenFolders, activeFolder, librarySort])
@@ -140,15 +154,24 @@ export function VideosView() {
     )
   }
 
-  async function handleAddFolder() {
-    try {
-      const { scanDeviceDirectory } = await import('@/lib/privateLibrary')
-      const count = await scanDeviceDirectory()
-      if (count > 0) {
-        useAppStore.getState().bumpData()
-        toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
-      }
-    } catch {
+  function handleAddFolder() {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      import('@/lib/privateLibrary').then(({ scanDeviceDirectory }) => {
+        scanDeviceDirectory()
+          .then((count) => {
+            if (count > 0) {
+              useAppStore.getState().bumpData()
+              toast.success(`Added ${count} video${count === 1 ? '' : 's'} from folder`)
+            }
+          })
+          .catch((err) => {
+            if (err?.name !== 'AbortError') {
+              requestVideoPick()
+            }
+          })
+      })
+    } else {
+      // Synchronous trigger for mobile
       requestVideoPick()
     }
   }
