@@ -7,10 +7,12 @@
 import type { HistoryDTO, PlaylistDTO, VideoDTO } from './types'
 
 const DB_NAME = 'vxplayer_local_library'
-const DB_VERSION = 2
+const DB_VERSION = 4
 const STORE_VIDEOS = 'local_videos'
 const STORE_HISTORY = 'local_history'
 const STORE_PLAYLISTS = 'local_playlists'
+const STORE_DIRECTORIES = 'scan_directories'
+const STORE_SCAN_STATE = 'scan_state'
 
 export type LocalVideoRecord = {
   id: string
@@ -26,8 +28,33 @@ export type LocalHistoryRecord = {
   lastPlayedAt: string
 }
 
+export type ScanDirectoryRecord = {
+  id: string
+  name: string
+  handle: FileSystemDirectoryHandle
+  grantedAt: number
+  lastScannedAt: number | null
+  videoCount: number
+  enabled: boolean
+}
+
+export type ScanStateRecord = {
+  key: 'scan_state'
+  isScanning: boolean
+  lastFullScanAt: number | null
+  scannedCount: number
+  totalEstimated: number
+  currentDirectory: string | null
+}
+
 // In-memory ObjectURL cache for active blob URLs
 const objectUrlMap = new Map<string, string>()
+
+// Video file extensions supported
+const VIDEO_EXTENSIONS = /\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|mts|m2ts|flv|ogv|wmv|asf|rm|rmvb|vob|divx|xvid)$/i
+
+// MIME types for video detection
+const VIDEO_MIME_PREFIX = 'video/'
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -48,6 +75,14 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_PLAYLISTS)) {
         db.createObjectStore(STORE_PLAYLISTS, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_DIRECTORIES)) {
+        const dirStore = db.createObjectStore(STORE_DIRECTORIES, { keyPath: 'id' })
+        dirStore.createIndex('by_name', 'name', { unique: false })
+        dirStore.createIndex('by_enabled', 'enabled', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(STORE_SCAN_STATE)) {
+        db.createObjectStore(STORE_SCAN_STATE, { keyPath: 'key' })
       }
     }
 
@@ -135,24 +170,521 @@ export function extractLocalVideoMetadata(file: File): Promise<{
 }
 
 /**
+ * Check if a file is a video based on extension and MIME type.
+ */
+function isVideoFile(file: File): boolean {
+  if (VIDEO_EXTENSIONS.test(file.name)) return true
+  if (file.type.startsWith(VIDEO_MIME_PREFIX)) return true
+  return false
+}
+
+/**
+ * Extract folder name from file path or directory handle.
+ */
+function extractFolderName(entry: FileSystemFileHandle | FileSystemDirectoryHandle, rootDirName: string): string {
+  // For now, use the root directory name as folder
+  // In a more advanced implementation, we could track relative paths
+  return rootDirName
+}
+
+/**
+ * Save video from a FileSystemFileHandle.
+ */
+async function saveVideoFromHandle(
+  fileHandle: FileSystemFileHandle,
+  folderName: string
+): Promise<VideoDTO | null> {
+  try {
+    const file = await fileHandle.getFile()
+    if (!isVideoFile(file)) return null
+    return await saveLocalVideo(file, folderName)
+  } catch (err) {
+    console.warn('Failed to save video from handle:', err)
+    return null
+  }
+}
+
+/**
+ * Recursively scan a directory for video files with batching for performance.
+ */
+async function scanDirectoryRecursive(
+  dirHandle: FileSystemDirectoryHandle,
+  folderName: string,
+  options: {
+    onProgress?: (scanned: number, totalEstimated: number, currentPath: string) => void
+    batchSize?: number
+    signal?: AbortSignal
+    maxFiles?: number
+  } = {}
+): Promise<number> {
+  const { onProgress, batchSize = 50, signal, maxFiles = 5000 } = options
+  let count = 0
+  let scanned = 0
+  const entries: Array<FileSystemFileHandle | FileSystemDirectoryHandle> = []
+
+  // Collect all entries first
+  for await (const entry of (dirHandle as any).values()) {
+    entries.push(entry)
+  }
+
+  // Process in batches to avoid blocking UI
+  for (let i = 0; i < entries.length; i += batchSize) {
+    if (signal?.aborted) break
+    if (count >= maxFiles) break
+
+    const batch = entries.slice(i, i + batchSize)
+    const batchPromises = batch.map(async (entry) => {
+      if (signal?.aborted) return 0
+
+      if (entry.kind === 'file') {
+        if (VIDEO_EXTENSIONS.test(entry.name)) {
+          const video = await saveVideoFromHandle(entry, folderName)
+          if (video) return 1
+        }
+        return 0
+      } else if (entry.kind === 'directory') {
+        // Recursively scan subdirectories
+        return await scanDirectoryRecursive(entry, entry.name, {
+          onProgress: (s, t, p) => onProgress?.(scanned + s, t, p),
+          batchSize,
+          signal,
+          maxFiles: maxFiles - count,
+        })
+      }
+      return 0
+    })
+
+    const results = await Promise.all(batchPromises)
+    for (const r of results) {
+      count += r
+      scanned += 1
+    }
+
+    onProgress?.(scanned, entries.length, folderName)
+
+    // Yield to main thread between batches
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  return count
+}
+
+/**
+ * Request permission for a directory handle and store it for persistent access.
+ */
+export async function requestDirectoryAccess(): Promise<FileSystemDirectoryHandle | null> {
+  if (typeof window === 'undefined' || !('showDirectoryPicker' in window)) {
+    throw new Error('Directory picker not supported in this browser')
+  }
+
+  // @ts-expect-error - showDirectoryPicker is standard in modern browsers
+  const dirHandle = await window.showDirectoryPicker({ mode: 'read' })
+  return dirHandle
+}
+
+/**
+ * Store a directory handle for persistent access across sessions.
+ */
+export async function storeDirectoryHandle(dirHandle: FileSystemDirectoryHandle): Promise<string> {
+  const id = `dir_${crypto.randomUUID()}`
+  const record: ScanDirectoryRecord = {
+    id,
+    name: dirHandle.name,
+    handle: dirHandle,
+    grantedAt: Date.now(),
+    lastScannedAt: null,
+    videoCount: 0,
+    enabled: true,
+  }
+
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_DIRECTORIES, 'readwrite')
+    tx.objectStore(STORE_DIRECTORIES).put(record)
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('Failed to store directory handle:', err)
+  }
+
+  return id
+}
+
+/**
+ * Get all stored directory handles.
+ */
+export async function getStoredDirectories(): Promise<ScanDirectoryRecord[]> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_DIRECTORIES, 'readonly')
+    const store = tx.objectStore(STORE_DIRECTORIES)
+
+    const records = await new Promise<ScanDirectoryRecord[]>((resolve, reject) => {
+      const req = store.getAll()
+      req.onsuccess = () => resolve(req.result as ScanDirectoryRecord[])
+      req.onerror = () => reject(req.error)
+    })
+
+    // Filter enabled directories
+    return (records || []).filter((d) => d.enabled)
+  } catch (err) {
+    console.warn('Failed to get stored directories:', err)
+    return []
+  }
+}
+
+/**
+ * Remove a stored directory handle.
+ */
+export async function removeStoredDirectory(id: string): Promise<void> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_DIRECTORIES, 'readwrite')
+    tx.objectStore(STORE_DIRECTORIES).delete(id)
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('Failed to remove stored directory:', err)
+  }
+}
+
+/**
+ * Update directory record (e.g., last scanned time, video count).
+ */
+export async function updateDirectoryRecord(id: string, updates: Partial<ScanDirectoryRecord>): Promise<void> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_DIRECTORIES, 'readwrite')
+    const store = tx.objectStore(STORE_DIRECTORIES)
+    const existing = await new Promise<ScanDirectoryRecord | undefined>((resolve, reject) => {
+      const req = store.get(id)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    if (existing) {
+      store.put({ ...existing, ...updates })
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+    }
+  } catch (err) {
+    console.warn('Failed to update directory record:', err)
+  }
+}
+
+/**
+ * Get or initialize scan state.
+ */
+async function getScanState(): Promise<ScanStateRecord> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_SCAN_STATE, 'readonly')
+    const store = tx.objectStore(STORE_SCAN_STATE)
+    const state = await new Promise<ScanStateRecord | undefined>((resolve, reject) => {
+      const req = store.get('scan_state')
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    return state || {
+      key: 'scan_state',
+      isScanning: false,
+      lastFullScanAt: null,
+      scannedCount: 0,
+      totalEstimated: 0,
+      currentDirectory: null,
+    }
+  } catch (err) {
+    console.warn('Failed to get scan state:', err)
+    return {
+      key: 'scan_state',
+      isScanning: false,
+      lastFullScanAt: null,
+      scannedCount: 0,
+      totalEstimated: 0,
+      currentDirectory: null,
+    }
+  }
+}
+
+/**
+ * Update scan state.
+ */
+async function updateScanState(updates: Partial<ScanStateRecord>): Promise<void> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_SCAN_STATE, 'readwrite')
+    const store = tx.objectStore(STORE_SCAN_STATE)
+    const existing = await getScanState()
+    store.put({ ...existing, ...updates })
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('Failed to update scan state:', err)
+  }
+}
+
+/**
+ * Perform a full scan of all stored directories.
+ * This is the main auto-scan function that runs on app start.
+ */
+export async function performFullScan(options: {
+  onProgress?: (progress: {
+    scanned: number
+    totalEstimated: number
+    currentDirectory: string | null
+    isComplete: boolean
+  }) => void
+  signal?: AbortSignal
+} = {}): Promise<{ totalAdded: number; directoriesScanned: number }> {
+  const { onProgress, signal } = options
+
+  await updateScanState({ isScanning: true, scannedCount: 0, totalEstimated: 0, currentDirectory: 'Starting...' })
+
+  const directories = await getStoredDirectories()
+  if (directories.length === 0) {
+    await updateScanState({ isScanning: false, currentDirectory: null })
+    onProgress?.({ scanned: 0, totalEstimated: 0, currentDirectory: null, isComplete: true })
+    return { totalAdded: 0, directoriesScanned: 0 }
+  }
+
+  let totalAdded = 0
+  let directoriesScanned = 0
+
+  for (const dir of directories) {
+    if (signal?.aborted) break
+
+    await updateScanState({ currentDirectory: dir.name })
+    onProgress?.({ scanned: totalAdded, totalEstimated: 0, currentDirectory: dir.name, isComplete: false })
+
+    try {
+      // Request permission for this directory handle
+      const permission = (dir.handle as any).requestPermission
+        ? await (dir.handle as any).requestPermission({ mode: 'read' })
+        : 'granted'
+      if (permission !== 'granted') {
+        console.warn(`Permission denied for directory: ${dir.name}`)
+        await updateDirectoryRecord(dir.id, { enabled: false })
+        continue
+      }
+
+      const added = await scanDirectoryRecursive(dir.handle, dir.name, {
+        onProgress: (scanned, totalEstimated, currentPath) => {
+          onProgress?.({ scanned: totalAdded + scanned, totalEstimated, currentDirectory: currentPath, isComplete: false })
+        },
+        signal,
+      })
+
+      totalAdded += added
+      directoriesScanned += 1
+
+      await updateDirectoryRecord(dir.id, {
+        lastScannedAt: Date.now(),
+        videoCount: dir.videoCount + added,
+      })
+    } catch (err) {
+      console.warn(`Failed to scan directory ${dir.name}:`, err)
+      // If permission was revoked, mark as disabled
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        await updateDirectoryRecord(dir.id, { enabled: false })
+      }
+    }
+
+    // Yield between directories
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  await updateScanState({
+    isScanning: false,
+    lastFullScanAt: Date.now(),
+    scannedCount: totalAdded,
+    currentDirectory: null,
+  })
+
+  onProgress?.({ scanned: totalAdded, totalEstimated: 0, currentDirectory: null, isComplete: true })
+
+  return { totalAdded, directoriesScanned }
+}
+
+/**
+ * Quick scan - only scan directories that haven't been scanned recently.
+ */
+export async function performQuickScan(options: {
+  onProgress?: (progress: { scanned: number; currentDirectory: string | null; isComplete: boolean }) => void
+  signal?: AbortSignal
+  maxAgeHours?: number
+} = {}): Promise<number> {
+  const { onProgress, signal, maxAgeHours = 24 } = options
+  const directories = await getStoredDirectories()
+  const cutoff = Date.now() - maxAgeHours * 60 * 60 * 1000
+
+  const staleDirs = directories.filter((d) => !d.lastScannedAt || d.lastScannedAt < cutoff)
+
+  if (staleDirs.length === 0) return 0
+
+  let totalAdded = 0
+
+  for (const dir of staleDirs) {
+    if (signal?.aborted) break
+
+    onProgress?.({ scanned: totalAdded, currentDirectory: dir.name, isComplete: false })
+
+    try {
+      const permission = (dir.handle as any).requestPermission
+        ? await (dir.handle as any).requestPermission({ mode: 'read' })
+        : 'granted'
+      if (permission !== 'granted') {
+        await updateDirectoryRecord(dir.id, { enabled: false })
+        continue
+      }
+
+      const added = await scanDirectoryRecursive(dir.handle, dir.name, {
+        onProgress: (scanned) => onProgress?.({ scanned: totalAdded + scanned, currentDirectory: dir.name, isComplete: false }),
+        signal,
+      })
+
+      totalAdded += added
+      await updateDirectoryRecord(dir.id, {
+        lastScannedAt: Date.now(),
+        videoCount: dir.videoCount + added,
+      })
+    } catch (err) {
+      console.warn(`Quick scan failed for ${dir.name}:`, err)
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        await updateDirectoryRecord(dir.id, { enabled: false })
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  onProgress?.({ scanned: totalAdded, currentDirectory: null, isComplete: true })
+  return totalAdded
+}
+
+/**
+ * Initialize auto-scan on app startup.
+ * Checks for stored directories and performs a quick scan if needed.
+ */
+export async function initializeAutoScan(): Promise<{ hasStoredDirs: boolean; added: number }> {
+  const directories = await getStoredDirectories()
+  const hasStoredDirs = directories.length > 0
+
+  if (!hasStoredDirs) {
+    return { hasStoredDirs: false, added: 0 }
+  }
+
+  // Check if we should do a quick scan (e.g., last scan was > 1 hour ago)
+  const scanState = await getScanState()
+  const lastScan = scanState.lastFullScanAt || 0
+  const oneHourAgo = Date.now() - 60 * 60 * 1000
+
+  if (lastScan < oneHourAgo) {
+    const added = await performQuickScan({ maxAgeHours: 1 })
+    return { hasStoredDirs: true, added }
+  }
+
+  return { hasStoredDirs: true, added: 0 }
+}
+
+/**
+ * Add a new directory to scan (user-initiated).
+ */
+export async function addScanDirectory(): Promise<{ count: number; directoryName: string } | null> {
+  try {
+    const dirHandle = await requestDirectoryAccess()
+    if (!dirHandle) return null
+
+    const id = await storeDirectoryHandle(dirHandle)
+
+    // Perform initial scan
+    const permission = (dirHandle as any).requestPermission
+      ? await (dirHandle as any).requestPermission({ mode: 'read' })
+      : 'granted'
+    if (permission !== 'granted') {
+      await removeStoredDirectory(id)
+      throw new Error('Permission denied for directory')
+    }
+
+    const count = await scanDirectoryRecursive(dirHandle, dirHandle.name, {
+      onProgress: (scanned, total, path) => {
+        console.log(`Scanning ${path}: ${scanned}/${total}`)
+      },
+    })
+
+    await updateDirectoryRecord(id, {
+      lastScannedAt: Date.now(),
+      videoCount: count,
+    })
+
+    return { count, directoryName: dirHandle.name }
+  } catch (err) {
+    console.warn('Failed to add scan directory:', err)
+    throw err
+  }
+}
+
+/**
  * Save a device video to the private local library with folder categorization.
+ * Prevents duplicates by fileName and size.
  */
 export async function saveLocalVideo(file: File, folderName?: string): Promise<VideoDTO> {
-  const id = `local_${crypto.randomUUID()}`
-  const meta = await extractLocalVideoMetadata(file)
   const ext = file.name.lastIndexOf('.') >= 0 ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase() : 'mp4'
   const title = file.name.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim() || 'Untitled Video'
   const sizeMB = Math.max(1, Math.round(file.size / (1024 * 1024)))
 
-  let folder = folderName || 'Device Storage'
-  if (!folderName) {
+  let folder = folderName?.trim()
+  if (!folder && file.webkitRelativePath) {
+    const parts = file.webkitRelativePath.split('/').filter(Boolean)
+    if (parts.length > 1) {
+      folder = parts[parts.length - 2]
+    }
+  }
+  if (!folder) {
     const lower = file.name.toLowerCase()
     if (/dcim|camera|vid_\d|p_v_|img_/i.test(lower)) folder = 'Camera'
     else if (/download|dl_|down/i.test(lower)) folder = 'Download'
     else if (/whatsapp|wa_/i.test(lower)) folder = 'WhatsApp Video'
-    else if (/screen|rec|capture/i.test(lower)) folder = 'Screen Recordings'
+    else if (/screen|rec|capture/i.test(lower)) folder = 'ScreenRecordings'
     else if (/movie|film|trailer/i.test(lower)) folder = 'Movies'
+    else if (/editor|edit/i.test(lower)) folder = 'Video Editor'
+    else if (/telegram/i.test(lower)) folder = 'Telegram'
+    else if (/instagram|insta/i.test(lower)) folder = 'Instagram'
+    else folder = 'Videos'
   }
+
+  // Deduplicate: check if an identical file already exists in IndexedDB
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_VIDEOS, 'readonly')
+    const store = tx.objectStore(STORE_VIDEOS)
+    const all = await new Promise<LocalVideoRecord[]>((resolve, reject) => {
+      const req = store.getAll()
+      req.onsuccess = () => resolve(req.result as LocalVideoRecord[])
+      req.onerror = () => reject(req.error)
+    })
+    const existing = (all || []).find(
+      (r) => r.video.fileName === file.name && Math.abs(r.video.sizeMB - sizeMB) <= 1
+    )
+    if (existing) {
+      // Re-create object URL if needed
+      let liveUrl = objectUrlMap.get(existing.id)
+      if (!liveUrl) {
+        liveUrl = URL.createObjectURL(existing.file)
+        objectUrlMap.set(existing.id, liveUrl)
+      }
+      return { ...existing.video, srcUrl: liveUrl }
+    }
+  } catch {}
+
+  const id = `local_${crypto.randomUUID()}`
+  const meta = await extractLocalVideoMetadata(file)
 
   // Active runtime object URL
   const srcUrl = URL.createObjectURL(file)
@@ -203,6 +735,7 @@ export async function saveLocalVideo(file: File, folderName?: string): Promise<V
 
 /**
  * Scan a directory using modern File System Access API (Android/Chrome/Edge).
+ * Automatically stores handle for persistent background access.
  */
 export async function scanDeviceDirectory(): Promise<number> {
   if (typeof window === 'undefined' || !('showDirectoryPicker' in window)) {
@@ -211,6 +744,13 @@ export async function scanDeviceDirectory(): Promise<number> {
 
   // @ts-expect-error - showDirectoryPicker is standard in modern browsers
   const dirHandle = await window.showDirectoryPicker({ mode: 'read' })
+  if (!dirHandle) return 0
+
+  // Persist handle for subsequent auto-scans
+  try {
+    await storeDirectoryHandle(dirHandle)
+  } catch {}
+
   let count = 0
 
   async function processEntries(handle: any, folderName: string) {
@@ -228,6 +768,29 @@ export async function scanDeviceDirectory(): Promise<number> {
   }
 
   await processEntries(dirHandle, dirHandle.name || 'Device Videos')
+  return count
+}
+
+/**
+ * Batch import files with non-blocking async execution.
+ */
+export async function scanFilesBatch(
+  files: File[] | FileList,
+  onProgress?: (current: number, total: number) => void
+): Promise<number> {
+  const fileArray = Array.from(files).filter((f) =>
+    /\.(mp4|mkv|avi|mov|webm|3gp|m4v|ts|flv)$/i.test(f.name) || f.type.startsWith('video/')
+  )
+  let count = 0
+  for (let i = 0; i < fileArray.length; i++) {
+    const f = fileArray[i]
+    await saveLocalVideo(f)
+    count++
+    onProgress?.(i + 1, fileArray.length)
+    if (i % 5 === 0) {
+      await new Promise((r) => setTimeout(r, 0))
+    }
+  }
   return count
 }
 

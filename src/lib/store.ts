@@ -12,6 +12,8 @@ export type AppView =
   | 'history'
   | 'settings'
   | 'search'
+  | 'music'
+  | 'explore'
 
 const SESSION_ID_KEY = 'vx_session_id'
 
@@ -74,6 +76,8 @@ type AppState = {
   sessionId: string
   offlineMode: boolean
   setOfflineMode: (b: boolean) => void
+  mediaPermission: 'granted' | 'denied' | 'prompt'
+  setMediaPermission: (p: 'granted' | 'denied' | 'prompt') => void
   /** campaignId -> impression count this session (client-side frequency cap) */
   sessionImpressions: Record<string, number>
   countImpression: (campaignId: string) => void
@@ -96,10 +100,18 @@ type AppState = {
 }
 
 const ADMIN_TOKEN_KEY = 'vx_admin_token'
+const MEDIA_PERMISSION_KEY = 'vx_media_permission'
 
 function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null
   return window.localStorage.getItem(ADMIN_TOKEN_KEY)
+}
+
+function getStoredPermission(): 'granted' | 'denied' | 'prompt' {
+  if (typeof window === 'undefined') return 'prompt'
+  const p = window.localStorage.getItem(MEDIA_PERMISSION_KEY)
+  if (p === 'granted' || p === 'denied') return p
+  return 'prompt'
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -109,6 +121,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
   dataVersion: 0,
   bumpData: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),
+  mediaPermission: getStoredPermission(),
+  setMediaPermission: (p) => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(MEDIA_PERMISSION_KEY, p)
+      } catch {}
+    }
+    set({ mediaPermission: p })
+  },
 
   playerVideo: null,
   playerQueue: [],

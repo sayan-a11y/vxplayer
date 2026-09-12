@@ -52,3 +52,10 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# IDE and local files
+.idea/
+local.properties
+gradle/
+*.db-shm
+*.db-wal

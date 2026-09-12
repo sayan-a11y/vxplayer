@@ -3,28 +3,34 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowUpDown,
+  Cast,
   Check,
   ChevronRight,
+  Compass,
+  Folder,
   FolderOpen,
   FolderSearch,
   Heart,
   History,
   Home,
   ListVideo,
-  MoreHorizontal,
   MoreVertical,
+  Music,
+  Play,
   PlaySquare,
   Plus,
   Search,
   Settings2,
   type LucideIcon,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { refreshAdCache } from '@/lib/ads-client'
 import { PICK_VIDEOS_EVENT, importVideoFiles, requestVideoPick } from '@/lib/import-client'
 import { useAppStore, type AppView } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,14 +39,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 
+import { ExploreView } from './ExploreView'
 import { FavoritesView } from './FavoritesView'
 import { FooterAd } from './FooterAd'
 import { FoldersView } from './FoldersView'
 import { HistoryView } from './HistoryView'
 import { HomeView } from './HomeView'
+import { MusicView } from './MusicView'
 import { PlaylistsView } from './PlaylistsView'
 import { SearchView } from './SearchView'
 import { SettingsView } from './SettingsView'
@@ -59,16 +66,11 @@ const NAV_ITEMS: NavItem[] = [
   { view: 'settings', label: 'Settings', icon: Settings2 },
 ]
 
+// Mobile bottom nav matching the reference image (4 items: Video, Music, Explore, Settings)
 const MOBILE_NAV_ITEMS: NavItem[] = [
-  { view: 'home', label: 'Home', icon: Home },
-  { view: 'videos', label: 'Videos', icon: PlaySquare },
-  { view: 'folders', label: 'Folders', icon: FolderOpen },
-  { view: 'playlists', label: 'Playlists', icon: ListVideo },
-]
-
-const MORE_SHEET_ITEMS: NavItem[] = [
-  { view: 'favorites', label: 'Favorites', icon: Heart },
-  { view: 'history', label: 'History', icon: History },
+  { view: 'home', label: 'Video', icon: Play },
+  { view: 'music', label: 'Music', icon: Music },
+  { view: 'explore', label: 'Explore', icon: Compass },
   { view: 'settings', label: 'Settings', icon: Settings2 },
 ]
 
@@ -98,6 +100,10 @@ function renderView(view: AppView) {
       return <SettingsView />
     case 'search':
       return <SearchView />
+    case 'music':
+      return <MusicView />
+    case 'explore':
+      return <ExploreView />
   }
 }
 
@@ -145,18 +151,70 @@ function MobileNavItem({
       onClick={onSelect}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-medium transition',
-        active ? 'text-[var(--vx-accent-soft)]' : 'text-muted-foreground hover:text-foreground'
+        'flex min-h-[58px] flex-col items-center justify-center gap-1 px-2 text-[11px] font-semibold transition active:scale-95',
+        active ? 'text-blue-400' : 'text-muted-foreground hover:text-foreground'
       )}
     >
-      <Icon className={cn('size-5 shrink-0', active && 'text-[var(--vx-accent)]')} />
-      {item.label}
+      <div
+        className={cn(
+          'flex h-7 w-12 items-center justify-center rounded-full transition-all duration-200',
+          active
+            ? 'bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white shadow-[0_0_14px_rgba(0,132,255,0.6)]'
+            : 'text-white/60'
+        )}
+      >
+        <Icon className={cn('size-4 shrink-0', active && item.view === 'home' && 'fill-white')} />
+      </div>
+      <span>{item.label}</span>
     </button>
   )
 }
 
+function MediaPermissionDialog({
+  open,
+  onGrant,
+  onDeny,
+}: {
+  open: boolean
+  onGrant: () => void
+  onDeny: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onDeny() }}>
+      <DialogContent className="vx-card border-white/10 bg-[#080914]/95 p-6 text-white backdrop-blur-2xl sm:max-w-md">
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-gradient-to-tr from-blue-600/20 to-cyan-500/20 text-cyan-400">
+            <FolderOpen className="size-7 text-[var(--vx-accent-soft)]" />
+          </div>
+          <h3 className="text-lg font-bold tracking-tight text-white">
+            Allow VX PLAYER to access photos and videos on this device?
+          </h3>
+          <p className="mt-2 text-xs text-white/60 leading-relaxed max-w-xs">
+            VX PLAYER automatically detects and organizes your videos across folders for seamless local playback. Media files stay 100% private on your device.
+          </p>
+          <div className="mt-6 flex w-full flex-col gap-2.5">
+            <Button
+              onClick={onGrant}
+              className="vx-btn-accent h-11 w-full font-semibold shadow-[0_0_20px_rgba(0,132,255,0.4)]"
+            >
+              Allow
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={onDeny}
+              className="h-10 text-xs text-white/50 hover:text-white"
+            >
+              Don't allow
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const iconBtnClass =
-  'grid size-11 place-items-center rounded-xl text-muted-foreground transition hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60'
+  'grid size-10 place-items-center rounded-xl text-muted-foreground transition hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60'
 
 export function AppShell() {
   const view = useAppStore((s) => s.view)
@@ -167,10 +225,20 @@ export function AppShell() {
   const setOfflineMode = useAppStore((s) => s.setOfflineMode)
   const tapCount = useAppStore((s) => s.tapCount)
   const registerLogoTap = useAppStore((s) => s.registerLogoTap)
+  const mediaPermission = useAppStore((s) => s.mediaPermission)
+  const setMediaPermission = useAppStore((s) => s.setMediaPermission)
 
-  const [moreOpen, setMoreOpen] = useState(false)
   const [tapChipVisible, setTapChipVisible] = useState(false)
+  const [permissionDialogOpen, setPermissionDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Show permission modal on initial mount if permission has not been decided yet
+  useEffect(() => {
+    if (mediaPermission === 'prompt') {
+      const timer = setTimeout(() => setPermissionDialogOpen(true), 600)
+      return () => clearTimeout(timer)
+    }
+  }, [mediaPermission])
 
   // "Scan device storage" opens the device video picker (gallery on Android).
   useEffect(() => {
@@ -180,9 +248,70 @@ export function AppShell() {
     return () => window.removeEventListener(PICK_VIDEOS_EVENT, open)
   }, [])
 
+  // Auto-scan on startup if permission is already granted
+  useEffect(() => {
+    if (mediaPermission === 'granted') {
+      import('@/lib/privateLibrary').then(({ initializeAutoScan }) => {
+        initializeAutoScan().then(({ added }) => {
+          if (added > 0) {
+            useAppStore.getState().bumpData()
+            toast.success(`Found ${added} new video${added === 1 ? '' : 's'} on device`)
+          }
+        }).catch(() => {})
+      })
+    }
+  }, [mediaPermission])
+
+  // Lightweight background sync on window focus/resume
+  useEffect(() => {
+    const onFocus = () => {
+      if (mediaPermission === 'granted') {
+        import('@/lib/privateLibrary').then(({ performQuickScan }) => {
+          performQuickScan({ maxAgeHours: 0.5 }).then((added) => {
+            if (added > 0) {
+              useAppStore.getState().bumpData()
+              toast.success(`Library updated: +${added} video${added === 1 ? '' : 's'}`)
+            }
+          }).catch(() => {})
+        })
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [mediaPermission])
+
   async function handleFilesChosen(files: FileList | null) {
     if (!files || files.length === 0) return
-    await importVideoFiles(Array.from(files))
+    try {
+      const { scanFilesBatch } = await import('@/lib/privateLibrary')
+      const count = await scanFilesBatch(files)
+      if (count > 0) {
+        useAppStore.getState().bumpData()
+        toast.success(`Detected ${count} video${count === 1 ? '' : 's'} across your folders`)
+      }
+    } catch {
+      await importVideoFiles(Array.from(files))
+    }
+  }
+
+  const handleGrantPermission = async () => {
+    setPermissionDialogOpen(false)
+    setMediaPermission('granted')
+    try {
+      const { scanDeviceDirectory } = await import('@/lib/privateLibrary')
+      const count = await scanDeviceDirectory()
+      if (count > 0) {
+        useAppStore.getState().bumpData()
+        toast.success(`Detected ${count} videos across your device folders`)
+      }
+    } catch {
+      fileInputRef.current?.click()
+    }
+  }
+
+  const handleDenyPermission = () => {
+    setPermissionDialogOpen(false)
+    setMediaPermission('denied')
   }
 
   // Auto-hide the "taps to admin" chip 3.5s after the last tap.
@@ -200,9 +329,99 @@ export function AppShell() {
   return (
     <div className="vx-root flex min-h-screen flex-col text-foreground">
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-black/30 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b border-white/5 bg-black/40 backdrop-blur-xl">
         <div className="flex h-16 items-center justify-between gap-2 px-3 sm:px-4 md:px-6">
-          <div className="flex min-w-0 items-center gap-2">
+          {/* MOBILE HEADER: VX PLAYER with "Play Everything. Anytime." + Cast + Search + More */}
+          <div className="flex md:hidden w-full items-center justify-between">
+            <div className="flex flex-col">
+              <button
+                type="button"
+                onClick={registerLogoTap}
+                aria-label="VX Player — tap 7 times for admin access"
+                className="text-left outline-none transition active:scale-95"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xl font-black tracking-wider bg-gradient-to-r from-blue-500 via-cyan-400 to-white bg-clip-text text-transparent">
+                    VX
+                  </span>
+                  <span className="text-xl font-bold tracking-tight text-white">
+                    PLAYER
+                  </span>
+                </div>
+                <p className="text-[10px] text-white/50 -mt-0.5 tracking-wide">
+                  Play Everything. Anytime.
+                </p>
+              </button>
+              {tapChipVisible && tapCount >= 2 && tapCount < 7 && (
+                <span
+                  className="vx-chip mt-1 shrink-0 animate-pulse border-[var(--vx-accent)]/40 bg-[var(--vx-accent)]/15 text-[9px] font-semibold text-[var(--vx-accent-soft)]"
+                  role="status"
+                >
+                  {7 - tapCount} taps to Admin
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => toast.info('Cast: Searching for Chromecast and Smart TVs on Wi-Fi...')}
+                aria-label="Cast to TV"
+                className={iconBtnClass}
+              >
+                <Cast className="size-[19px]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setView('search')}
+                aria-label="Search videos"
+                className={iconBtnClass}
+              >
+                <Search className="size-[19px]" />
+              </button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="More options" className={iconBtnClass}>
+                    <MoreVertical className="size-[19px]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-[#090b1c] border-white/10 text-xs">
+                  <DropdownMenuItem onSelect={() => requestVideoPick()} className="gap-2.5">
+                    <FolderSearch className="size-4" />
+                    Scan device storage
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem onSelect={() => setView('settings')} className="gap-2.5">
+                    <Settings2 className="size-4" />
+                    Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setView('history')} className="gap-2.5">
+                    <History className="size-4" />
+                    Recently Played
+                  </DropdownMenuItem>
+                  <div
+                    className="flex items-center justify-between gap-4 px-2 py-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium">Offline mode</p>
+                      <p className="text-[10px] text-muted-foreground">Serve ads from cache</p>
+                    </div>
+                    <Switch
+                      checked={offlineMode}
+                      onCheckedChange={setOfflineMode}
+                      aria-label="Offline mode"
+                    />
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* DESKTOP HEADER (>=768px): Full controls & logo */}
+          <div className="hidden md:flex min-w-0 items-center gap-2">
             <button
               type="button"
               onClick={registerLogoTap}
@@ -225,7 +444,7 @@ export function AppShell() {
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <div className="hidden md:flex shrink-0 items-center gap-1 sm:gap-1.5">
             <Button
               onClick={() => requestVideoPick()}
               size="sm"
@@ -233,8 +452,7 @@ export function AppShell() {
               aria-label="Add videos from device"
             >
               <Plus className="size-3.5" />
-              <span className="hidden sm:inline">+ Add Video</span>
-              <span className="sm:hidden">+ Video</span>
+              <span>+ Add Video</span>
             </Button>
 
             <button
@@ -334,9 +552,7 @@ export function AppShell() {
           </div>
         </aside>
 
-        {/* Main column — content + footer stacked so the footer pins to the
-            viewport bottom on short pages and is pushed down on long ones
-            (on mobile the sidebar is hidden, so this is the full width). */}
+        {/* Main column — content + footer */}
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="vx-scroll min-w-0 flex-1 px-3.5 py-4 pb-6 sm:px-5 sm:py-6 md:px-8 md:pb-8">
             {renderView(view)}
@@ -359,62 +575,32 @@ export function AppShell() {
         </div>
       </div>
 
-      {/* ── Mobile bottom nav ──────────────────────────────────── */}
+      {/* ── Mobile bottom nav — 4 tabs (Video, Music, Explore, Settings) ── */}
       <nav
         aria-label="Primary mobile"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/70 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl md:hidden"
       >
-        <div className="mx-auto grid max-w-md grid-cols-5">
+        <div className="mx-auto grid max-w-md grid-cols-4 px-2">
           {MOBILE_NAV_ITEMS.map((item) => (
             <MobileNavItem
               key={item.view}
               item={item}
-              active={view === item.view}
+              active={
+                (item.view === 'home' && (view === 'home' || view === 'videos' || view === 'folders')) ||
+                view === item.view
+              }
               onSelect={() => setView(item.view)}
             />
           ))}
-          <MobileNavItem
-            item={{ view: 'settings', label: 'More', icon: MoreHorizontal }}
-            active={view === 'favorites' || view === 'history' || view === 'settings'}
-            onSelect={() => setMoreOpen(true)}
-          />
         </div>
       </nav>
 
-      {/* Mobile "More" sheet */}
-      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-        <SheetContent
-          side="bottom"
-          className="vx-scroll rounded-t-2xl px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
-        >
-          <SheetHeader className="p-0 text-left">
-            <SheetTitle>More</SheetTitle>
-            <SheetDescription className="sr-only">Favorites, history and settings</SheetDescription>
-          </SheetHeader>
-          <div className="mt-3 flex flex-col gap-1">
-            {MORE_SHEET_ITEMS.map((item) => {
-              const Icon = item.icon
-              return (
-                <button
-                  key={item.view}
-                  type="button"
-                  onClick={() => {
-                    setMoreOpen(false)
-                    setView(item.view)
-                  }}
-                  className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 text-left text-sm font-medium transition hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vx-accent)]/60"
-                >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--vx-accent)]/15 text-[var(--vx-accent-soft)]">
-                    <Icon className="size-4" />
-                  </span>
-                  {item.label}
-                  <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground" />
-                </button>
-              )
-            })}
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Native-style media permission dialog */}
+      <MediaPermissionDialog
+        open={permissionDialogOpen}
+        onGrant={handleGrantPermission}
+        onDeny={handleDenyPermission}
+      />
 
       {/* Hidden device video picker (opened via header menu / empty states / settings) */}
       <input

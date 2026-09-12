@@ -201,7 +201,7 @@ export async function GET(req: Request) {
       recentAudit: recentAuditRows.map((a) => ({
         id: a.id,
         adminName: a.adminName,
-        adminEmail: a.adminEmail,
+        adminEmail: a.adminEmail ?? '',
         action: a.action,
         target: a.target,
         detail: a.detail,

@@ -183,7 +183,7 @@ export default function PlacementsView() {
               (p.id === 'IMAGE_OVERLAY' && c.placements.includes('OVERLAY'))
           )
           const active = targeting.filter((c) => c.status === 'ACTIVE').length
-          const enabled = settings[p.settingKey] ?? true
+          const enabled = Boolean(settings[p.settingKey] ?? true)
           return (
             <div key={p.id} className="vx-card flex flex-col justify-between space-y-3.5 p-4 sm:p-5">
               <div className="space-y-3">
